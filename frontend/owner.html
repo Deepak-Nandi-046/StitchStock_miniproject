@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>StitchStock · Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body class="admin-page">
+  <div class="admin-shell">
+    <aside class="admin-sidebar" aria-label="Admin navigation">
+      <div class="admin-brand">
+        <img src="assets/yarn-logo.png" alt="">
+        <strong>StitchStock</strong>
+        <small>Handmade with Love ♥</small>
+      </div>
+      <nav class="admin-nav" id="adminNav">
+        <button class="nav-button active" type="button" data-view="dashboard"><span class="nav-icon">⌂</span><span class="nav-label">Dashboard</span></button>
+        <button class="nav-button" type="button" data-view="projects"><span class="nav-icon">▧</span><span class="nav-label">My Projects</span></button>
+        <button class="nav-button" type="button" data-view="patterns"><span class="nav-icon">▤</span><span class="nav-label">Pattern Library</span></button>
+        <button class="nav-button" type="button" data-view="finished"><span class="nav-icon">♲</span><span class="nav-label">Finished Designs</span></button>
+        <button class="nav-button" type="button" data-view="orders"><span class="nav-icon">$</span><span class="nav-label">Orders &amp; Sales</span></button>
+        <button class="nav-button" type="button" data-view="analytics"><span class="nav-icon">⌁</span><span class="nav-label">Analytics</span></button>
+      </nav>
+      <div class="sidebar-bottom">
+        <button class="nav-button" type="button" data-view="settings"><span class="nav-icon">⚙</span><span class="nav-label">Settings</span></button>
+      </div>
+    </aside>
+
+    <main class="admin-main">
+      <header class="admin-topbar">
+        <div class="topbar-title">
+          <h1 id="pageTitle">Welcome back, Maker!</h1>
+          <p id="pageSubtitle">Here is your crochet design overview for today.</p>
+        </div>
+        <div class="topbar-actions">
+          <label class="global-search"><span style="position:absolute;width:1px;height:1px;overflow:hidden">Search</span><input id="globalSearch" type="search" placeholder="Search crochet designs, bags, orders..."></label>
+          <button class="icon-button" id="notificationButton" type="button" title="Notifications" aria-label="Notifications">♧</button>
+          <button class="profile-mini" id="profileButton" type="button" aria-label="Account menu">
+            <span class="avatar" id="profileAvatar">A</span>
+            <span><strong id="profileName">admin</strong><small id="profileRole">owner</small></span>
+          </button>
+        </div>
+      </header>
+
+      <section class="admin-view active" id="view-dashboard">
+        <div class="stat-grid" id="dashboardStats">
+          <div class="stat-card"><div class="stat-icon">⌕</div><div><strong>—</strong><span>Loading</span></div></div>
+        </div>
+        <div class="dashboard-grid">
+          <section class="admin-panel">
+            <div class="panel-head"><h2>Current Work in Progress</h2><button class="text-button" type="button" data-open-design>＋ New</button></div>
+            <div class="work-grid" id="workGrid"></div>
+          </section>
+          <aside class="admin-panel">
+            <div class="panel-head"><h2>Top Selling Designs</h2></div>
+            <div class="side-list" id="topSelling"></div>
+          </aside>
+        </div>
+        <section class="admin-panel orders-panel" id="dashboardOrdersPanel">
+          <div class="panel-head"><h2>Recent Customer Orders</h2><button class="text-button" type="button" data-view-link="orders">View all</button></div>
+          <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Order ID</th><th>Item</th><th>Customer</th><th>Status</th><th>Price</th><th>Action</th></tr></thead><tbody id="recentOrders"></tbody></table></div>
+        </section>
+      </section>
+
+      <section class="admin-view" id="view-projects">
+        <div class="toolbar">
+          <div class="toolbar-tabs">
+            <button class="tab-chip active" type="button" data-project-filter="All">All Projects</button>
+            <button class="tab-chip" type="button" data-project-filter="In Progress">In Progress</button>
+            <button class="tab-chip" type="button" data-project-filter="Almost Done">Almost Done</button>
+            <button class="tab-chip" type="button" data-project-filter="Made to Order">Made to Order</button>
+          </div>
+          <button class="pink-button" type="button" data-open-design>＋ Add New Design</button>
+        </div>
+        <div class="design-grid" id="projectGrid"></div>
+      </section>
+
+      <section class="admin-view" id="view-patterns">
+        <div class="toolbar">
+          <div class="toolbar-tabs">
+            <button class="tab-chip active" type="button" data-pattern-filter="All">All Patterns</button>
+            <button class="tab-chip" type="button" data-pattern-filter="Bag">Bags &amp; Purses</button>
+            <button class="tab-chip" type="button" data-pattern-filter="Bouquet">Bouquets &amp; Decor</button>
+            <button class="tab-chip" type="button" data-pattern-filter="Accessories">Accessories</button>
+          </div>
+          <button class="pink-button" type="button" data-open-design>＋ Upload Pattern</button>
+        </div>
+        <div class="design-grid pattern-grid" id="patternGrid"></div>
+      </section>
+
+      <section class="admin-view" id="view-finished">
+        <div class="toolbar">
+          <div class="toolbar-tabs">
+            <button class="tab-chip active" type="button" data-finished-filter="All">All Designs</button>
+            <button class="tab-chip" type="button" data-finished-filter="Bags &amp; Purses">Bags &amp; Purses</button>
+            <button class="tab-chip" type="button" data-finished-filter="Bouquets &amp; Decor">Bouquets &amp; Decor</button>
+            <button class="tab-chip" type="button" data-finished-filter="Accessories">Accessories</button>
+          </div>
+          <button class="pink-button" type="button" data-open-design>＋ Add to Gallery</button>
+        </div>
+        <div class="design-grid" id="finishedGrid"></div>
+      </section>
+
+      <section class="admin-view" id="view-orders">
+        <div class="toolbar">
+          <div class="toolbar-tabs" id="orderStatusTabs">
+            <button class="tab-chip active" type="button" data-order-filter="All">All Orders</button>
+            <button class="tab-chip" type="button" data-order-filter="Confirmed">Confirmed</button>
+            <button class="tab-chip" type="button" data-order-filter="Pre-order Queued">Pre-orders</button>
+            <button class="tab-chip" type="button" data-order-filter="Shipped">Shipped</button>
+          </div>
+        </div>
+        <section class="admin-panel">
+          <div class="panel-head"><h2>Orders &amp; Sales</h2></div>
+          <div class="admin-table-wrap"><table class="admin-table"><thead><tr><th>Order</th><th>Item</th><th>Customer</th><th>Qty</th><th>Status</th><th>Placed</th><th>Move to</th></tr></thead><tbody id="allOrders"></tbody></table></div>
+        </section>
+      </section>
+
+      <section class="admin-view" id="view-analytics">
+        <div class="analytics-grid">
+          <div class="stat-card"><div class="stat-icon">₹</div><div><strong>₹8,450</strong><span>Total Revenue</span><em>+18.5% this month</em></div></div>
+          <div class="stat-card"><div class="stat-icon">◇</div><div><strong>142</strong><span>Designs Sold</span><em>2 designs pending</em></div></div>
+          <div class="stat-card"><div class="stat-icon">◷</div><div><strong>₹59.50</strong><span>Average Order</span><em>−2% from last week</em></div></div>
+          <div class="stat-card"><div class="stat-icon">♡</div><div><strong>38%</strong><span>Custom Order Rate</span><em>Higher request volume</em></div></div>
+        </div>
+        <div class="analytics-main">
+          <section class="admin-panel chart-box">
+            <div class="panel-head"><h2>Monthly Design Sales &amp; Revenue</h2></div>
+            <div class="bar-chart" id="barChart"></div>
+          </section>
+          <section class="admin-panel chart-box">
+            <div class="panel-head"><h2>Sales by Category</h2></div>
+            <div class="donut"></div>
+            <div class="legend"><span><b>◼ Bags</b><b>38%</b></span><span><b>◼ Bouquets</b><b>28%</b></span><span><b>◼ Accessories</b><b>24%</b></span><span><b>◼ Apparel</b><b>10%</b></span></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="admin-view" id="view-settings">
+        <div class="settings-grid">
+          <section class="admin-panel settings-card">
+            <h2>Store profile</h2>
+            <div class="settings-row"><label for="storeName">Store name</label><input id="storeName" value="StitchStock"></div>
+            <div class="settings-row"><label for="storeEmail">Owner email</label><input id="storeEmail" value="admin@gmail.com"></div>
+            <div class="settings-row"><label for="currency">Currency</label><select id="currency"><option>INR — ₹</option><option>USD — $</option></select></div>
+            <button class="pink-button" type="button" id="saveSettings">Save settings</button>
+          </section>
+          <section class="admin-panel settings-card">
+            <h2>Account</h2>
+            <p class="mute">Manage the currently signed-in owner account.</p>
+            <button class="outline-button" type="button" id="logoutButton">Log out</button>
+            <button class="danger-button" type="button" id="deleteAccount">Delete account</button>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="designModal" role="dialog" aria-modal="true" aria-labelledby="designModalTitle">
+    <div class="design-modal">
+      <button class="modal-close" type="button" id="closeDesignModal" aria-label="Close design dialog">×</button>
+      <h2 id="designModalTitle">Add / Edit <span>Crochet Design</span></h2>
+      <div class="modal-grid">
+        <div class="upload-box" id="uploadBox">
+          <div><img class="upload-preview" id="uploadPreview" src="assets/romantic-crochet-garden-banner.png" alt=""><strong>Upload or Drag Image</strong><p class="mute">(Max 5, 1200×1200px)</p><button class="outline-button" type="button" id="uploadButton">Browse image</button></div>
+        </div>
+        <div>
+          <div class="form-grid">
+            <label class="form-field full">Design Title<input id="designTitle" value="Rose Bouquet Tote Bag"></label>
+            <label class="form-field">Category<select id="designCategory"><option>Bags &amp; Purses</option><option>Bouquets &amp; Decor</option><option>Accessories</option><option>Apparel</option></select></label>
+            <label class="form-field">Price ($)<input id="designPrice" type="number" min="0" value="129"></label>
+            <label class="form-field">Availability<select id="designStatus"><option>In Stock</option><option>Made to Order</option><option>Featured</option></select></label>
+            <label class="form-field">Stock<input id="designStock" type="number" min="0" value="5"></label>
+            <label class="form-field full">Design Description &amp; Care Notes<textarea id="designDescription">Hand-crochet from premium cotton yarn. Spot clean only, air dry.</textarea></label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions"><button class="outline-button" type="button" id="cancelDesign">Cancel</button><button class="pink-button" type="button" id="saveDesign">Save Design</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="deleteModal" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
+    <div class="design-modal" style="width:min(420px,96vw)">
+      <h2 id="deleteTitle" style="font-family:'Nunito',sans-serif;font-size:20px;color:#a83d48">Delete account?</h2>
+      <p>This cannot be undone. Your owner account and access will be removed.</p>
+      <label class="form-field">Type DELETE to confirm<input id="deleteConfirm" autocomplete="off" placeholder="DELETE"></label>
+      <div class="modal-actions"><button class="outline-button" type="button" id="deleteCancel">Cancel</button><button class="danger-button" type="button" id="deleteConfirmBtn" disabled>Delete account</button></div>
+    </div>
+  </div>
+
+  <div class="hover-preview" id="hoverPreview"><img src="assets/romantic-crochet-garden-banner.png" alt=""><strong id="hoverTitle"></strong><span id="hoverText"></span></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="js/api.js"></script>
+  <script>
+    const u=guard('owner');
+    let summary=null, orderFilter='All', projectFilter='All', patternFilter='All', finishedFilter='All';
+    const titles={
+      dashboard:['Welcome back, Maker!','Here is your crochet design overview for today.'],
+      projects:['My Crochet Projects','Track active work and custom project progress.'],
+      patterns:['Pattern Library','Organize reusable crochet patterns and pattern files.'],
+      finished:['Finished Designs Gallery','Manage showcase pieces and collection availability.'],
+      orders:['Orders & Sales','Review customer orders and update their status.'],
+      analytics:['Sales & Trends','Understand revenue and crochet design performance.'],
+      settings:['Admin Settings','Manage profile, preferences and account access.']
+    };
+
+    if(u){
+      document.getElementById('profileName').textContent=u.name;
+      document.getElementById('profileRole').textContent=u.role;
+      document.getElementById('profileAvatar').textContent=String(u.name||'A').charAt(0).toUpperCase();
+      document.getElementById('storeEmail').value=u.email||'admin@gmail.com';
+      load();
+      setInterval(()=>{if(!document.hidden)load(false)},30000);
+    }
+
+    document.querySelectorAll('[data-view]').forEach(button=>{
+      button.onclick=()=>switchView(button.dataset.view);
+    });
+    document.querySelectorAll('[data-view-link]').forEach(button=>{
+      button.onclick=()=>switchView(button.dataset.viewLink);
+    });
+
+    function switchView(view){
+      document.querySelectorAll('.admin-view').forEach(el=>el.classList.toggle('active',el.id==='view-'+view));
+      document.querySelectorAll('[data-view]').forEach(el=>el.classList.toggle('active',el.dataset.view===view));
+      const title=titles[view]||titles.dashboard;
+      document.getElementById('pageTitle').textContent=title[0];
+      document.getElementById('pageSubtitle').textContent=title[1];
+      if(location.hash!=='#'+view)location.hash=view;
+    }
+
+    function hashView(){const view=location.hash.slice(1);if(titles[view])switchView(view);}
+    window.addEventListener('hashchange',hashView);
+    hashView();
+
+    async function load(showSuccess){
+      try{
+        summary=await api('/owner/summary');
+        renderDashboard();
+        renderOrders();
+        renderProjects();
+        renderPatterns();
+        renderFinished();
+        if(showSuccess)toast('Dashboard refreshed');
+      }catch(error){toast(error.message)}
+    }
+
+    function renderDashboard(){
+      const today=new Date().toDateString();
+      const todayOrders=summary.orders.filter(o=>new Date(o.createdAt).toDateString()===today).length;
+      const waiting=summary.products.reduce((n,p)=>n+(Number(p.queue)||0),0);
+      const pending=summary.orders.filter(o=>o.status==='Ready for Balance Payment').length;
+      const sales=summary.orders.filter(o=>o.status==='Payment Completed'||o.status==='Shipped').length;
+      const cards=[
+        ['⌕',summary.products.length,'Active Projects','+2 this week'],
+        ['♲',summary.products.filter(p=>p.stock>0).length,'Finished Designs','In showcase'],
+        ['$'+waiting,'4','Pending Orders','Custom queue'],
+        ['$',sales?'₹1,240':'₹1,240','Monthly Sales','+18% vs last month']
+      ];
+      document.getElementById('dashboardStats').innerHTML=cards.map((c,i)=>
+        `<article class="stat-card"><div class="stat-icon">${esc(c[0])}</div><div><strong>${esc(c[1])}</strong><span>${esc(c[2])}</span><em>${esc(c[3])}</em></div></article>`
+      ).join('');
+
+      const work=[
+        ['Rose Bouquet Tote Bag',75,'Pearl handle · Bridal collection'],
+        ['Pastel Daisy Mini Purse',90,'Mini clutch · Almost done'],
+        ['Lavender Fields Bouquet',40,'Home decor · Gift order']
+      ];
+      document.getElementById('workGrid').innerHTML=work.map((w,i)=>
+        `<article class="work-card" data-preview="${esc(w[0])}|${esc(w[2])}">
+          <div class="work-image" style="${i===1?'background-position:center 55%':''}"></div>
+          <div class="work-body"><h3>${esc(w[0])}</h3><div class="progress-track"><div class="progress-fill" style="width:${w[1]}%"></div></div>
+          <div class="progress-meta"><span>${esc(w[2])}</span><b>${w[1]}%</b></div>
+          <div class="card-actions"><button class="outline-button" type="button" data-open-design>+ Update Progress</button></div></div>
+        </article>`
+      ).join('');
+      document.getElementById('topSelling').innerHTML=summary.products.slice(0,4).map((p,i)=>
+        `<div class="top-item" data-preview="${esc(p.name)}|₹${esc(p.price)} · ${esc(p.stock)} in stock">
+          <img src="assets/romantic-crochet-garden-banner.png" alt=""><div><strong>${esc(p.name)}</strong><span>★ 4.${8-i} · ♡ ${195-i*20}</span></div>${i<2?'<span class="featured-pill">Feature</span>':''}
+        </div>`
+      ).join('');
+      bindPreviewEvents();
+      bindDesignButtons();
+    }
+
+    function getProductName(id){return (summary?.products.find(p=>p.id===id)||{}).name||'Unknown item';}
+    function statusClass(status){return 'status-'+String(status||'').replace(/\s+/g,'-');}
+
+    function renderOrders(){
+      const pn=id=>getProductName(id);
+      const moveRows=rows=>{
+        return rows.length?rows.map(o=>{
+          const moves=(summary.nextMoves[o.status]||[]);
+          return `<tr><td>${esc(o.id)}</td><td>${esc(pn(o.productId))}</td><td title="${esc(o.customerId)}">${esc(shortId(o.customerId))}</td><td>${esc(o.qty)}</td><td><span class="status-chip ${statusClass(o.status)}">${esc(o.status)}</span></td><td>${esc(new Date(o.createdAt).toLocaleDateString())}</td><td>${moves.map(s=>`<button class="outline-button" type="button" data-order="${o.id}" data-status="${esc(s)}">${esc(s)}</button>`).join(' ')||'—'}</td></tr>`;
+        }).join(''):'<tr><td colspan="7" style="text-align:center;color:#806f6b">No orders found</td></tr>';
+      };
+      document.getElementById('recentOrders').innerHTML=moveRows(summary.orders.slice(0,5));
+      const filtered=orderFilter==='All'?summary.orders:summary.orders.filter(o=>o.status===orderFilter);
+      document.getElementById('allOrders').innerHTML=moveRows(filtered);
+      document.querySelectorAll('[data-order]').forEach(button=>{
+        button.onclick=()=>{
+          const status=button.dataset.status;
+          if(status==='Cancelled'&&!confirm('Cancel this order? This may restore stock.'))return;
+          if(status==='Shipped'&&!confirm('Mark this order as shipped?'))return;
+          ownerAction('/owner/orders/'+encodeURIComponent(button.dataset.order)+'/status',{status},button);
+        };
+      });
+    }
+
+    async function ownerAction(path,body,button){
+      if(button)button.disabled=true;
+      try{await api(path,'POST',body);toast('Action completed');await load(false)}
+      catch(error){toast(error.message);if(button)button.disabled=false}
+    }
+
+    function shortId(value){const text=String(value||'');return text.length>12?text.slice(0,8):text;}
+
+    const designSeed=[
+      ['Spring Bloom Pouch','Bags & Purses','$85.00','In Stock'],
+      ['Sunflower Pot','Bouquets & Decor','$45.00','Featured'],
+      ['Pearl Handle Clutch','Accessories','$85.00','In Stock'],
+      ['Strawberry Crossbody','Bags & Purses','$85.00','Made to Order'],
+      ['Lavender Bouquet','Bouquets & Decor','$70.00','Featured'],
+      ['Slipper Slippers','Accessories','$85.00','In Stock'],
+      ['Daisy Mini Purse','Bags & Purses','$65.00','In Stock'],
+      ['Textured Tote','Bags & Purses','$85.00','Featured']
+    ];
+
+    function designCard(d,index){
+      const status=d[3];const category=d[1];
+      return `<article class="design-card" data-preview="${esc(d[0])}|${esc(category)} · ${esc(d[2])}">
+        <div class="design-image"></div><span class="design-status ${status==='Featured'?'featured':status==='Made to Order'?'order':''}">${esc(status)}</span>
+        <div class="design-body"><h3>${esc(d[0])}</h3><div class="design-meta"><span>${esc(category)}</span><b>${esc(d[2])}</b></div>
+        <div class="design-actions"><button class="outline-button" type="button" data-open-design>✎ Edit</button><button class="pink-button" type="button" data-feature="${esc(d[0])}">Feature</button><button class="outline-button" type="button" data-delete-design="${esc(d[0])}">Delete</button></div></div>
+      </article>`;
+    }
+
+    function renderProjects(){
+      const filtered=designSeed.filter((d,i)=>
+        projectFilter==='All' ||
+        (projectFilter==='In Progress'&&i%3===0) ||
+        (projectFilter==='Almost Done'&&i%3===1) ||
+        (projectFilter==='Made to Order'&&d[3]==='Made to Order')
+      );
+      document.getElementById('projectGrid').innerHTML=filtered.map(designCard).join('');
+      bindDesignActions();
+    }
+    function renderPatterns(){const filter=patternFilter==='All'?designSeed:designSeed.filter(d=>d[1].includes(patternFilter)||patternFilter==='Bag'&&d[1].includes('Bags'));document.getElementById('patternGrid').innerHTML=filter.map(designCard).join('');bindDesignActions();}
+    function renderFinished(){const filter=finishedFilter==='All'?designSeed:designSeed.filter(d=>d[1].includes(finishedFilter));document.getElementById('finishedGrid').innerHTML=filter.map(designCard).join('');bindDesignActions();}
+
+    document.querySelectorAll('[data-project-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-project-filter]').forEach(x=>x.classList.remove('active'));b.classList.add('active');projectFilter=b.dataset.projectFilter;renderProjects();});
+    document.querySelectorAll('[data-pattern-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-pattern-filter]').forEach(x=>x.classList.remove('active'));b.classList.add('active');patternFilter=b.dataset.patternFilter;renderPatterns();});
+    document.querySelectorAll('[data-finished-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-finished-filter]').forEach(x=>x.classList.remove('active'));b.classList.add('active');finishedFilter=b.dataset.finishedFilter;renderFinished();});
+    document.querySelectorAll('[data-order-filter]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-order-filter]').forEach(x=>x.classList.remove('active'));b.classList.add('active');orderFilter=b.dataset.orderFilter;renderOrders();});
+
+    function bindDesignActions(){
+      bindPreviewEvents();bindDesignButtons();
+      document.querySelectorAll('[data-feature]').forEach(b=>b.onclick=()=>toast(b.dataset.feature+' featured'));
+      document.querySelectorAll('[data-delete-design]').forEach(b=>b.onclick=()=>{if(confirm('Delete '+b.dataset.deleteDesign+'?'))b.closest('.design-card').remove();});
+    }
+    function bindPreviewEvents(){
+      const preview=document.getElementById('hoverPreview');
+      document.querySelectorAll('[data-preview]').forEach(el=>{
+        el.onmouseenter=()=>{const parts=el.dataset.preview.split('|');document.getElementById('hoverTitle').textContent=parts[0];document.getElementById('hoverText').textContent=parts[1]||'';preview.classList.add('show');};
+        el.onmousemove=event=>{preview.style.left=(event.clientX+16+preview.offsetWidth<window.innerWidth?event.clientX+16:event.clientX-preview.offsetWidth-16)+'px';preview.style.top=(event.clientY+16+preview.offsetHeight<window.innerHeight?event.clientY+16:event.clientY-preview.offsetHeight-16)+'px';};
+        el.onmouseleave=()=>preview.classList.remove('show');
+      });
+    }
+
+    function bindDesignButtons(){document.querySelectorAll('[data-open-design]').forEach(b=>b.onclick=openDesignModal);}
+    function openDesignModal(){document.getElementById('designModal').classList.add('open');document.getElementById('designTitle').focus();}
+    document.getElementById('cancelDesign').onclick=()=>document.getElementById('designModal').classList.remove('open');
+    document.getElementById('closeDesignModal').onclick=()=>document.getElementById('designModal').classList.remove('open');
+    document.getElementById('saveDesign').onclick=()=>{document.getElementById('designModal').classList.remove('open');toast('Design saved');};
+    document.getElementById('uploadButton').onclick=()=>toast('Choose an image from your device');
+
+    document.getElementById('notificationButton').onclick=()=>toast('No new notifications');
+    document.getElementById('profileButton').onclick=()=>switchView('settings');
+    document.getElementById('logoutButton').onclick=()=>{store.clear();location.href='login.html';};
+    document.getElementById('saveSettings').onclick=()=>toast('Settings saved');
+
+    const deleteModal=document.getElementById('deleteModal'),deleteConfirm=document.getElementById('deleteConfirm'),deleteConfirmBtn=document.getElementById('deleteConfirmBtn');
+    document.getElementById('deleteAccount').onclick=()=>{deleteModal.classList.add('open');deleteConfirm.value='';deleteConfirmBtn.disabled=true;deleteConfirm.focus();};
+    deleteConfirm.oninput=()=>deleteConfirmBtn.disabled=deleteConfirm.value!=='DELETE';
+    document.getElementById('deleteCancel').onclick=()=>deleteModal.classList.remove('open');
+    deleteConfirmBtn.onclick=async()=>{
+      if(deleteConfirm.value!=='DELETE')return;
+      deleteConfirmBtn.disabled=true;
+      try{await api('/auth/account','DELETE');store.clear();location.href='login.html';}
+      catch(error){toast(error.message);deleteConfirmBtn.disabled=false;}
+    };
+
+    document.getElementById('globalSearch').oninput=event=>{
+      const q=event.target.value.trim().toLowerCase();
+      document.querySelectorAll('.work-card,.design-card,.top-item').forEach(el=>el.style.display=!q||el.textContent.toLowerCase().includes(q)?'':'none');
+    };
+
+    const bar=document.getElementById('barChart');
+    const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    bar.innerHTML=months.map((m,i)=>`<div class="bar-group" data-month="${m}"><div class="bar bags" style="height:${55+(i%4)*18}px"></div><div class="bar bouquets" style="height:${70+(i%5)*12}px"></div><div class="bar accessories" style="height:${45+(i%3)*16}px"></div><div class="bar apparel" style="height:${35+(i%4)*14}px"></div></div>`).join('');
+  </script>
+</body>
+</html>

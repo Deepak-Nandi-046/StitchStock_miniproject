@@ -1,0 +1,22 @@
+:root{--bg:#faf7f2;--card:#fff;--ink:#2b2433;--mute:#6f6679;--line:#e7e0d8;--brand:#7a4cd6;--ok:#2f8f5b;--warn:#b7791f;--bad:#c0392b}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--ink)}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--card);border-bottom:1px solid var(--line);flex-wrap:wrap;gap:8px}
+header h1{font-size:20px;margin:0}header nav{display:flex;gap:12px;align-items:center;color:var(--mute);font-size:14px}
+header nav .user-menu{display:flex;align-items:center;gap:16px}
+main{max-width:980px;margin:0 auto;padding:20px 16px}
+h2{font-size:17px;margin:24px 0 10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card h3{margin:0 0 4px;font-size:16px}.mute{color:var(--mute);font-size:13px}
+button,.btn{font:inherit;font-size:14px;padding:7px 14px;border-radius:8px;border:0;background:var(--brand);color:#fff;cursor:pointer}
+button.ghost{background:transparent;color:var(--brand);border:1px solid var(--brand)}button:disabled{opacity:.5;cursor:default}
+input{font:inherit;padding:9px 10px;border:1px solid var(--line);border-radius:8px;width:100%}
+label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+.chip{display:inline-block;font-size:12px;padding:2px 9px;border-radius:99px;background:#eee;color:#444}
+.s-Confirmed,.s-Shipped{background:#e0f3e8;color:var(--ok)}.s-Pre-order-Queued{background:#fdf0d5;color:var(--warn)}
+.s-In-Production,.s-Ready-for-Balance-Payment{background:#e8e1fa;color:var(--brand)}.s-Payment-Completed{background:#dff0f7;color:#1d6f8c}.s-Cancelled{background:#fbe3e0;color:var(--bad)}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:14px}
+th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line)}th{font-size:12px;color:var(--mute);text-transform:uppercase;letter-spacing:.03em}
+.tablewrap{overflow-x:auto}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw}
+#toast.on{opacity:1}.auth{max-width:380px;margin:8vh auto}.err{color:var(--bad);font-size:13px;min-height:18px}

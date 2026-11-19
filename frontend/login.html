@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>StitchStock · Log in</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Great+Vibes&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/login.css">
+</head>
+<body class="login">
+<div class="login-decor login-decor-left" aria-hidden="true">♡　♡</div>
+<div class="login-decor login-decor-right" aria-hidden="true">
+  <span class="flower flower-coral">✿</span><span class="flower flower-berry">✿</span>
+</div>
+<main class="login-card">
+  <div class="card-flower card-flower-bottom" aria-hidden="true">✿</div>
+
+  <section id="viewLogin" aria-labelledby="welcome">
+    <div class="brand">
+      <div class="yarn-logo" aria-hidden="true">
+        <img src="assets/yarn-logo.png" alt="StitchStock yarn logo">
+      </div>
+      <h1><span>Stitch</span><strong>Stock</strong></h1>
+      <small>Handmade with Love <span aria-hidden="true">♥</span></small>
+    </div>
+    <h2 id="welcome">Welcome Back!</h2>
+    <p class="subtitle" id="sub">Log in to continue your crochet journey ♡</p>
+
+    <form id="f" novalidate>
+      <div class="field" id="nameRow" hidden>
+        <label for="name">Name</label>
+        <div class="input-wrap">
+          <span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3"></circle><path d="M5 20c.7-3.3 3.1-5 7-5s6.3 1.7 7 5"></path></svg></span>
+          <input id="name" autocomplete="name" placeholder="Your name">
+        </div>
+      </div>
+      <div class="field" id="emailRow">
+        <label for="email">Email address</label>
+        <div class="input-wrap">
+          <span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m4 7 8 6 8-6"></path></svg></span>
+          <input id="email" type="email" autocomplete="email" placeholder="Email address" required>
+        </div>
+      </div>
+      <div class="field" id="passwordRow">
+        <label for="pw">Password</label>
+        <div class="input-wrap">
+          <span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>
+          <input id="pw" type="password" autocomplete="current-password" maxlength="64" placeholder="Password" required>
+          <button type="button" class="icon-button" id="eye" aria-label="Show password" aria-pressed="false">
+            <svg class="eye-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-5 9.5-5 9.5 5 9.5 5-3.5 5-9.5 5-9.5-5-9.5-5Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>
+            <svg class="eye-off" viewBox="0 0 24 24" aria-hidden="true"><path d="m3 3 18 18M10.6 6.9A10.7 10.7 0 0 1 12 7c6 0 9.5 5 9.5 5a17 17 0 0 1-3.2 3.3M6.7 6.8C4 8.3 2.5 12 2.5 12s3.5 5 9.5 5c1.2 0 2.3-.2 3.2-.6"></path></svg>
+          </button>
+        </div>
+      </div>
+      <ul class="password-rules" id="passwordRules" hidden>
+        <li>8–64 characters</li><li>Uppercase and lowercase letter</li><li>Number and special character</li>
+      </ul>
+      <button type="button" class="forgot" id="forgot">Forgot password?</button>
+      <p class="error" id="err" role="alert"></p>
+      <button class="primary" id="go">Log In <span aria-hidden="true">→</span></button>
+    </form>
+
+    <div class="divider" aria-hidden="true"><span>OR</span></div>
+    <button type="button" class="social-button" id="google"><b class="google-g">G</b>Continue with Google</button>
+    <button type="button" class="social-button" id="apple"><b class="apple-logo">●</b>Continue with Apple</button>
+
+    <p class="switch" id="switchRow"><span id="swText">Don't have an account?</span> <button type="button" id="tog">Create Account</button></p>
+  </section>
+
+  <section id="viewOtp" hidden aria-labelledby="otpHeading">
+    <button type="button" class="back-link" id="back" aria-label="Back to login">← Back</button>
+    <div class="brand compact">
+      <div class="yarn-logo" aria-hidden="true">
+        <img src="assets/yarn-logo.png" alt="StitchStock yarn logo">
+      </div>
+      <h1><span>Stitch</span><strong>Stock</strong></h1>
+    </div>
+    <h2 id="otpHeading">Check your email</h2>
+    <p class="subtitle">Enter the 6-digit code sent to <strong id="maskedEmail"></strong>.</p>
+    <div id="fo" role="form">
+      <div class="field otp-field">
+        <label for="otp">Email verification code</label>
+        <input id="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="000000" aria-describedby="oerr">
+      </div>
+      <p class="error" id="oerr" role="alert"></p>
+      <button class="primary" type="button" id="verify">Verify and log in <span aria-hidden="true">→</span></button>
+    </div>
+    <p class="otp-actions"><button type="button" id="resend" disabled>Resend code <span id="resendTimer"></span></button></p>
+  </section>
+
+  <section id="viewForgot" hidden aria-labelledby="resetHeading">
+    <button type="button" class="back-link" id="forgotBack" aria-label="Back to login">← Back</button>
+    <div class="brand compact">
+      <img class="yarn-logo" src="assets/yarn-logo.png" alt="StitchStock yarn logo">
+      <h1><span>Stitch</span><strong>Stock</strong></h1>
+    </div>
+    <h2 id="resetHeading">Reset password</h2>
+    <p class="subtitle">Enter your registered email to receive a reset link.</p>
+    <div id="resetRequest">
+      <div class="field">
+        <label for="resetEmail">Registered email address</label>
+        <div class="input-wrap">
+          <span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m4 7 8 6 8-6"></path></svg></span>
+          <input id="resetEmail" type="email" autocomplete="email" placeholder="Email address">
+        </div>
+      </div>
+      <p class="error" id="resetErr" role="alert"></p>
+      <button type="button" class="primary" id="sendResetOtp">Send reset link <span aria-hidden="true">→</span></button>
+      <div class="reset-link-box" id="resetLinkBox" hidden>
+        <p>For this demo, use the reference reset link below:</p>
+        <a id="resetLink" href="#">Open reset link</a>
+      </div>
+    </div>
+    <div id="resetVerify" hidden>
+      <p class="reset-note">Create a new password for your account.</p>
+      <div class="field">
+        <label for="resetPassword">New password</label>
+        <div class="input-wrap">
+          <span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>
+          <input id="resetPassword" type="password" autocomplete="new-password" maxlength="64" placeholder="New password">
+        </div>
+      </div>
+      <ul class="password-rules reset-rules">
+        <li>8–64 characters</li><li>Uppercase and lowercase letter</li><li>Number and special character</li>
+      </ul>
+      <div class="field">
+        <label for="confirmPassword">Confirm new password</label>
+        <div class="input-wrap">
+          <span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>
+          <input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Confirm new password">
+        </div>
+      </div>
+      <p class="error" id="resetOtpErr" role="alert"></p>
+      <button type="button" class="primary" id="changePassword">Change password <span aria-hidden="true">→</span></button>
+    </div>
+  </section>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/api.js"></script>
+<script>
+  let reg = false;
+  let challengeId = null;
+  let resetChallengeId = null;
+  let resendTimerId = null;
+  let resendSeconds = 30;
+  const $ = id => document.getElementById(id);
+  const msg = text => { $('err').textContent = text; $('err').classList.remove('success'); };
+  const otpMsg = text => { $('oerr').textContent = text; };
+  const notifyComingSoon = () => toast('Coming soon');
+  const isStrongPassword = password =>
+    password.length >= 8 && password.length <= 64 &&
+    /[A-Z]/.test(password) && /[a-z]/.test(password) &&
+    /\d/.test(password) && /[^A-Za-z0-9]/.test(password);
+  const passwordError = 'Password must be 8-64 characters and include uppercase, lowercase, a number, and a special character.';
+
+  function setRegistrationMode() {
+    $('nameRow').hidden = !reg;
+    $('passwordRules').hidden = !reg;
+    document.querySelector('.login-card').classList.toggle('registration-mode', reg);
+    $('forgot').hidden = reg;
+    $('go').innerHTML = reg ? 'Create Account' : 'Log In <span aria-hidden="true">→</span>';
+    $('tog').textContent = reg ? 'Log in' : 'Create Account';
+    $('swText').textContent = reg ? 'Already have an account?' : "Don't have an account?";
+    $('sub').textContent = reg ? 'Create a customer account to start ordering.' : 'Log in to continue your crochet journey ♡';
+    $('pw').autocomplete = reg ? 'new-password' : 'current-password';
+  }
+
+  function startResendTimer() {
+    clearInterval(resendTimerId);
+    resendSeconds = 30;
+    $('resend').disabled = true;
+    $('resendTimer').textContent = `(${resendSeconds}s)`;
+    resendTimerId = setInterval(() => {
+      resendSeconds -= 1;
+      $('resendTimer').textContent = resendSeconds ? `(${resendSeconds}s)` : '';
+      if (!resendSeconds) {
+        clearInterval(resendTimerId);
+        $('resend').disabled = false;
+      }
+    }, 1000);
+  }
+
+  function showOtp(r) {
+    challengeId = r.challengeId;
+    $('viewLogin').hidden = true;
+    $('viewOtp').hidden = false;
+    $('maskedEmail').textContent = $('email').value.trim().replace(/^(.{2}).*(@.*)$/, '$1•••$2');
+    $('otp').value = '';
+    otpMsg('');
+    if (r.demoOtp) {
+      $('oerr').textContent = `Demo verification code: ${r.demoOtp}`;
+      $('oerr').classList.add('demo-message');
+    }
+    startResendTimer();
+    $('otp').focus();
+  }
+
+  $('tog').onclick = () => { reg = !reg; msg(''); setRegistrationMode(); };
+  $('eye').onclick = () => {
+    const show = $('pw').type === 'password';
+    $('pw').type = show ? 'text' : 'password';
+    $('eye').setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    $('eye').setAttribute('aria-pressed', String(show));
+    $('eye').classList.toggle('is-visible', show);
+  };
+  $('forgot').onclick = () => {
+    $('viewLogin').hidden = true;
+    $('viewOtp').hidden = true;
+    $('viewForgot').hidden = false;
+    $('resetHeading').textContent = 'Reset password';
+    $('resetRequest').hidden = false;
+    $('resetVerify').hidden = true;
+    $('resetLinkBox').hidden = true;
+    $('resetErr').textContent = '';
+    $('resetOtpErr').textContent = '';
+    $('resetEmail').focus();
+  };
+  $('forgotBack').onclick = () => {
+    $('viewForgot').hidden = true;
+    $('viewLogin').hidden = false;
+    $('resetEmail').value = '';
+    $('resetPassword').value = '';
+    $('confirmPassword').value = '';
+    $('resetLinkBox').hidden = true;
+    $('resetHeading').textContent = 'Reset password';
+    $('email').focus();
+  };
+  $('google').onclick = notifyComingSoon;
+  $('apple').onclick = notifyComingSoon;
+
+  $('back').onclick = () => {
+    clearInterval(resendTimerId);
+    challengeId = null;
+    $('viewOtp').hidden = true;
+    $('viewLogin').hidden = false;
+    $('otp').value = '';
+    $('email').focus();
+  };
+  $('resend').onclick = () => { notifyComingSoon(); startResendTimer(); };
+
+  $('sendResetOtp').onclick = async () => {
+    const email = $('resetEmail').value.trim();
+    $('resetErr').textContent = '';
+    $('resetErr').classList.remove('success');
+    $('resetLinkBox').hidden = true;
+    if (!/^\S+@\S+\.\S+$/.test(email))
+      return $('resetErr').textContent = 'Enter a valid registered email address.';
+    $('sendResetOtp').disabled = true;
+    try {
+      const response = await api('/auth/password-reset/request', 'POST', { email });
+      resetChallengeId = response.challengeId;
+      if (response.resetLink) {
+        $('resetLink').href = response.resetLink;
+        $('resetLinkBox').hidden = false;
+        $('resetLink').onclick = event => {
+          event.preventDefault();
+          $('resetRequest').hidden = true;
+          $('resetVerify').hidden = false;
+          $('resetHeading').textContent = 'Create new password';
+          $('resetPassword').focus();
+        };
+      }
+      $('resetErr').textContent = response.message;
+      $('resetErr').classList.add('success');
+    } catch (error) {
+      $('resetErr').textContent = error.message;
+      $('resetErr').classList.remove('success');
+    } finally {
+      $('sendResetOtp').disabled = false;
+    }
+  };
+
+  $('changePassword').onclick = async () => {
+    $('resetOtpErr').classList.remove('success', 'demo-message');
+    $('resetOtpErr').textContent = '';
+    const password = $('resetPassword').value;
+    if (!isStrongPassword(password))
+      return $('resetOtpErr').textContent = passwordError;
+    if (password !== $('confirmPassword').value)
+      return $('resetOtpErr').textContent = 'Passwords do not match.';
+    $('changePassword').disabled = true;
+    try {
+      const response = await api('/auth/password-reset/complete', 'POST', {
+        challengeId: resetChallengeId,
+        password
+      });
+      $('resetOtpErr').textContent = response.message;
+      $('resetOtpErr').classList.add('success');
+      setTimeout(() => {
+        $('forgotBack').click();
+      }, 1200);
+    } catch (error) {
+      $('resetOtpErr').textContent = error.message;
+    } finally {
+      $('changePassword').disabled = false;
+    }
+  };
+
+  $('f').onsubmit = async event => {
+    event.preventDefault();
+    msg('');
+    if (!$('email').value.trim() || !$('pw').value) return msg('Please enter your email and password.');
+    if (reg && !isStrongPassword($('pw').value)) return msg(passwordError);
+    $('go').disabled = true;
+    try {
+      const registering = reg;
+      const response = await api(registering ? '/auth/register' : '/auth/login', 'POST', {
+        name: $('name').value.trim(),
+        email: $('email').value.trim(),
+        password: $('pw').value
+      });
+      if (registering) {
+        reg = false;
+        setRegistrationMode();
+        $('name').value = '';
+        $('pw').value = '';
+        $('err').textContent = response.message || 'Account created. Please log in to continue.';
+        $('err').classList.add('success');
+        $('email').focus();
+        return;
+      }
+      if (response.challengeId) {
+        showOtp(response);
+        return;
+      }
+      store.set(response.token, response.user);
+      location.href = response.user.role === 'owner' ? 'owner.html' : 'index.html';
+    } catch (error) {
+      msg(error.message);
+    } finally {
+      $('go').disabled = false;
+    }
+  };
+
+  $('verify').onclick = async () => {
+    otpMsg('');
+    if (!/^\d{6}$/.test($('otp').value.trim())) return otpMsg('Please enter the 6-digit code sent to your email.');
+    $('verify').disabled = true;
+    try {
+      const response = await api('/auth/login/verify', 'POST', { challengeId, otp: $('otp').value.trim() });
+      store.set(response.token, response.user);
+      location.href = response.user.role === 'owner' ? 'owner.html' : 'index.html';
+    } catch (error) {
+      otpMsg(error.message);
+    } finally {
+      $('verify').disabled = false;
+    }
+  };
+  $('otp').onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); $('verify').click(); } };
+</script>
+</body>
+</html>
