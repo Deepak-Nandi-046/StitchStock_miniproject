@@ -12,7 +12,7 @@ const view = u => {
     id: u.id,
     name: u.user_metadata?.name || u.email?.split('@')[0] || 'User',
     email: u.email,
-    role: metadataRole || (ownerEmails.has(email) ? 'owner' : 'customer'),
+    role: ownerEmails.has(email) ? 'owner' : (metadataRole || 'customer'),
   };
 };
 const PASSWORD_ERROR = 'Password must be 8-64 characters and include uppercase, lowercase, a number, and a special character.';

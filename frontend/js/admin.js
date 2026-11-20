@@ -14,55 +14,30 @@ async function initAdmin() {
   document.getElementById('adminApp').innerHTML = `
     <section class="admin-banner" id="overview">
       <div>
-        <h1>Good morning, <em>${esc(ownerUser.name)}</em></h1>
+        <h1>Handmade <em>Crochet Treasures</em></h1>
+        <p class="admin-banner-category">Overview <span>✿</span> Inventory <span>✿</span> Orders <span>✿</span> Audit</p>
         <p id="adminDate"></p>
       </div>
     </section>
+    <nav class="admin-category-strip" aria-label="Admin sections">
+      <button type="button" class="admin-category-tile" data-admin-section="overview">
+        <span class="admin-category-icon" aria-hidden="true">▣</span><span>Overview</span>
+      </button>
+      <button type="button" class="admin-category-tile" data-admin-link="inventory.html">
+        <span class="admin-category-icon" aria-hidden="true">◷</span><span>Queues</span>
+      </button>
+      <button type="button" class="admin-category-tile" data-admin-section="orders">
+        <span class="admin-category-icon" aria-hidden="true">🛍️</span><span>Orders</span>
+      </button>
+      <button type="button" class="admin-category-tile" data-admin-section="audit">
+        <span class="admin-category-icon" aria-hidden="true">✓</span><span>Audit</span>
+      </button>
+    </nav>
     <section class="stat-grid" id="stats">
       <article class="card stat-card"><span class="stat-icon">▣</span><div><strong>—</strong><span>Orders today</span></div></article>
       <article class="card stat-card"><span class="stat-icon">◷</span><div><strong>—</strong><span>Waiting in queues</span></div></article>
       <article class="card stat-card"><span class="stat-icon">₹</span><div><strong>—</strong><span>Awaiting payment</span></div></article>
       <article class="card stat-card"><span class="stat-icon">!</span><div><strong>—</strong><span>Low stock</span></div></article>
-    </section>
-    <section class="admin-section" id="inventory">
-      <div class="section-title-row">
-        <h2>Inventory</h2>
-        <button type="button" class="pill-btn" id="toggleAddProduct">+ Add ready product</button>
-      </div>
-      <form class="add-product-form" id="addProductForm" hidden>
-        <label>Name
-          <input id="newProductName" name="name" maxlength="100" required>
-        </label>
-        <label>Price (₹)
-          <input id="newProductPrice" name="price" type="number" min="0" step="0.01" required>
-        </label>
-        <label>Stock
-          <input id="newProductStock" name="stock" type="number" min="0" step="1" value="1" required>
-        </label>
-        <label>Category
-          <select id="newProductCategory" name="category">
-            <option>Bags</option>
-            <option>Bouquets</option>
-            <option>Flowers</option>
-            <option>Handbags</option>
-            <option>Home Decor</option>
-            <option>Accessories</option>
-            <option>Keychains</option>
-            <option>Custom Orders</option>
-          </select>
-        </label>
-        <label class="wide-field">Image URL
-          <input id="newProductImage" name="image_url" type="text" placeholder="assets/hero.webp or https://...">
-        </label>
-        <label class="wide-field">Description
-          <input id="newProductDescription" name="description" maxlength="300">
-        </label>
-        <div class="form-actions">
-          <button type="button" class="outline-btn" id="cancelAddProduct">Cancel</button>
-          <button type="submit" class="pill-btn" id="submitAddProduct">Add product</button>
-        </div>
-      </form>
-      <div class="inventory-grid" id="inventoryGrid"><div class="admin-empty">Loading inventory... 🧶</div></div>
     </section>
     <section class="admin-section" id="orders">
       <h2>Orders</h2>
@@ -93,7 +68,15 @@ async function initAdmin() {
   document.getElementById('adminDate').textContent = new Intl.DateTimeFormat('en-IN', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
   }).format(new Date());
-  bindAddProductForm();
+  document.querySelectorAll('[data-admin-section]').forEach(button => {
+    button.onclick = () => {
+      const section = document.getElementById(button.dataset.adminSection);
+      section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (button.textContent.includes('Add Product')) {
+        document.getElementById('toggleAddProduct')?.click();
+      }
+    };
+  });
   document.getElementById('orderSearch').oninput = event => {
     orderSearch = event.target.value.trim().toLowerCase();
     renderOrders();
@@ -112,49 +95,10 @@ async function initAdmin() {
   });
 }
 
-function bindAddProductForm() {
-  const form = document.getElementById('addProductForm');
-  const toggle = document.getElementById('toggleAddProduct');
-  const cancel = document.getElementById('cancelAddProduct');
-  toggle.onclick = () => {
-    form.hidden = !form.hidden;
-    if (!form.hidden) document.getElementById('newProductName').focus();
-  };
-  cancel.onclick = () => {
-    form.reset();
-    form.hidden = true;
-  };
-  form.onsubmit = async event => {
-    event.preventDefault();
-    const submit = document.getElementById('submitAddProduct');
-    submit.disabled = true;
-    try {
-      const product = await api('/owner/products', 'POST', {
-        name: document.getElementById('newProductName').value,
-        price: Number(document.getElementById('newProductPrice').value),
-        stock: Number(document.getElementById('newProductStock').value),
-        category: document.getElementById('newProductCategory').value,
-        image_url: document.getElementById('newProductImage').value,
-        description: document.getElementById('newProductDescription').value
-      });
-      toast(`${product.name} added`);
-      form.reset();
-      form.hidden = true;
-      await refreshAdmin(false);
-    } catch (error) {
-      toast(error.message);
-      submit.disabled = false;
-    } finally {
-      submit.disabled = false;
-    }
-  };
-}
-
 async function refreshAdmin(manual) {
   try {
     ownerSummary = await api('/owner/summary');
     renderStats();
-    renderInventory();
     renderOrders();
     renderAudit();
     const time = new Intl.DateTimeFormat('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
@@ -190,75 +134,6 @@ function renderStats() {
 function productName(productId) {
   const product = ownerSummary?.products.find(item => item.id === productId);
   return product ? product.name : 'Unknown item';
-}
-
-function renderInventory() {
-  const host = document.getElementById('inventoryGrid');
-  if (!ownerSummary.products.length) {
-    host.innerHTML = '<div class="admin-empty">No inventory items yet 🧶</div>';
-    return;
-  }
-  host.innerHTML = ownerSummary.products.map(product => {
-    const stock = Number(product.stock) || 0;
-    const fillClass = stock <= 2 ? 'low' : stock <= 5 ? 'warn' : 'good';
-    const fillWidth = Math.min(100, stock * 10);
-    const image = product.image_url || 'assets/login-background.jpg';
-    const queue = Number(product.queue) || 0;
-    return `<article class="inventory-card">
-      <img class="inventory-image" src="${esc(image)}" alt="${esc(product.name)}" onerror="this.onerror=null;this.style.display='none'">
-      <div class="inventory-body">
-        <h3>${esc(product.name)}</h3>
-        <div class="inventory-meta"><span>₹${esc(Number(product.price).toLocaleString('en-IN'))}</span><span>${esc(stock)} in stock</span></div>
-        <div class="stock-track"><div class="stock-fill ${fillClass}" style="width:${fillWidth}%"></div></div>
-        <div class="inventory-meta"><span>Queue: ${esc(queue)}</span></div>
-        <div class="restock-row">
-          <input type="number" min="1" max="100" value="5" data-restock-input="${esc(product.id)}" aria-label="Restock amount for ${esc(product.name)}">
-          <button type="button" class="compact-btn" data-restock-quick="${esc(product.id)}">+5 stock</button>
-          <button type="button" class="compact-btn primary" data-restock="${esc(product.id)}">Restock</button>
-        </div>
-        <button type="button" class="compact-btn" style="width:100%;margin-top:6px" data-allocate="${esc(product.id)}" ${queue === 0 ? 'disabled' : ''}>Serve next in queue</button>
-      </div>
-    </article>`;
-  }).join('');
-
-  host.querySelectorAll('[data-restock]').forEach(button => {
-    button.onclick = () => restockProduct(button);
-  });
-  host.querySelectorAll('[data-restock-quick]').forEach(button => {
-    button.onclick = () => restockProduct(button, 5);
-  });
-  host.querySelectorAll('[data-allocate]').forEach(button => {
-    button.onclick = () => allocateQueue(button);
-  });
-}
-
-async function restockProduct(button, quickAmount) {
-  const productId = button.dataset.restock || button.dataset.restockQuick;
-  const input = [...document.querySelectorAll('[data-restock-input]')]
-    .find(item => item.dataset.restockInput === productId);
-  const add = quickAmount ?? Number(input?.value);
-  if (!Number.isInteger(add) || add < 1) return toast('Enter a valid stock amount');
-  button.disabled = true;
-  try {
-    await api(`/owner/products/${encodeURIComponent(productId)}/restock`, 'POST', { add });
-    toast('Stock updated');
-    await refreshAdmin(false);
-  } catch (error) {
-    toast(error.message);
-    button.disabled = false;
-  }
-}
-
-async function allocateQueue(button) {
-  button.disabled = true;
-  try {
-    await api(`/owner/queue/${encodeURIComponent(button.dataset.allocate)}/allocate`, 'POST');
-    toast('Next queue item moved to In Production');
-    await refreshAdmin(false);
-  } catch (error) {
-    toast(error.message);
-    button.disabled = false;
-  }
 }
 
 function renderOrders() {

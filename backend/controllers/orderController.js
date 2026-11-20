@@ -80,18 +80,40 @@ exports.addProduct = async (req, res) => {
     ...(description ? { description } : {})
   };
 
-  const { data, error } = await supabase
+  let data = null;
+  let error = null;
+
+  const extendedInsert = await supabase
     .from('products')
     .insert(payload)
     .select('*')
     .single();
+  data = extendedInsert.data;
+  error = extendedInsert.error;
+
+  if (error) {
+    // Existing databases may not have the optional category/image/description columns yet.
+    const baseInsert = await supabase
+      .from('products')
+      .insert({ name, price, stock })
+      .select('*')
+      .single();
+    data = baseInsert.data;
+    error = baseInsert.error;
+  }
 
   if (error) {
     console.error('Supabase product insert failed:', error.message);
     return res.status(500).json({ error: 'Could not add the product' });
   }
 
-  db.products.push(data);
+  const addedProduct = {
+    ...data,
+    ...(category ? { category } : {}),
+    ...(imageUrl ? { image_url: imageUrl } : {}),
+    ...(description ? { description } : {})
+  };
+  db.products.push(addedProduct);
   await recordAudit({
     actor: req.user.id,
     action: 'PRODUCT_ADDED',

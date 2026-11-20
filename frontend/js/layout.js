@@ -5,8 +5,8 @@ function renderLayout(role, u) {
     ['Flowers', 'index.html#shop'], ['Custom Orders', 'index.html#custom'], ['About', 'index.html#about']
   ];
   const ownerNav = [
-    ['Overview', 'owner.html#overview'], ['Inventory', 'owner.html#inventory'],
-    ['Queues', 'owner.html#inventory'], ['Orders', 'owner.html#orders'], ['Audit', 'owner.html#audit']
+    ['Overview', 'owner.html#overview'], ['Inventory', 'inventory.html'],
+    ['Queues', 'inventory.html#inventory'], ['Orders', 'owner.html#orders'], ['Audit', 'owner.html#audit']
   ];
   const nav = role === 'owner' ? ownerNav : customerNav;
   const header = document.getElementById('siteHeader');
@@ -16,13 +16,23 @@ function renderLayout(role, u) {
       <span class="brand-copy"><strong>Stitch<span>Stock</span></strong><small>Handmade with Love ♥</small></span>
     </a>
     <nav class="main-nav" id="mainNav" aria-label="${role === 'owner' ? 'Admin' : 'Store'} navigation">
-      ${nav.map(([label, href]) => `<a class="nav-pill${label === (role === 'owner' ? 'Overview' : 'Home') ? ' active' : ''}" href="${esc(href)}">${esc(label)}</a>`).join('')}
+      ${nav.map(([label, href]) => {
+        const current = location.pathname.toLowerCase();
+        const isActive = role === 'owner'
+          ? (label === 'Overview' && current.endsWith('/owner.html'))
+            || (label === 'Inventory' && current.endsWith('/inventory.html'))
+            || (label === 'Queues' && current.endsWith('/inventory.html'))
+            || (label === 'Orders' && current.endsWith('/owner.html') && location.hash === '#orders')
+            || (label === 'Audit' && current.endsWith('/owner.html') && location.hash === '#audit')
+          : label === 'Home';
+        return `<a class="nav-pill${isActive ? ' active' : ''}" href="${esc(href)}">${esc(label)}</a>`;
+      }).join('')}
     </nav>
     <div class="header-tools">
       ${role === 'customer'
         ? `<label class="header-search" aria-label="Search products">⌕<input id="headerSearch" type="search" placeholder="Search crochet items..."></label>
            <button type="button" class="icon-btn" id="wishlistHeader" aria-label="Wishlist">♡<span class="count-badge" id="wishlistCount">0</span></button>
-           <a class="icon-btn" href="#orders" aria-label="My orders">🛒</a>`
+           <button type="button" class="icon-btn" id="bagHeader" aria-label="Open shopping bag">🛒<span class="count-badge" id="bagCount">0</span></button>`
         : '<button type="button" class="icon-btn refresh-btn" id="refreshAdmin" aria-label="Refresh dashboard" title="Refresh">↻</button>'}
       <details class="user-menu-wrap">
         <summary class="icon-btn profile-icon" aria-label="Open user menu" title="${esc(u.name)}">👤</summary>
@@ -47,6 +57,7 @@ function renderLayout(role, u) {
   };
   document.getElementById('layoutDelete').onclick = openDeleteModal;
   updateWishlistCount();
+  updateBagCount();
 }
 
 function updateWishlistCount() {
@@ -61,6 +72,16 @@ function updateWishlistCount() {
     }
   } catch (e) {}
   const badge = document.getElementById('wishlistCount');
+  if (badge) badge.textContent = String(count);
+}
+
+function updateBagCount() {
+  let count = 0;
+  try {
+    const parsed = JSON.parse(localStorage.getItem('ss_bag') || '[]');
+    count = Array.isArray(parsed) ? parsed.length : 0;
+  } catch (e) {}
+  const badge = document.getElementById('bagCount');
   if (badge) badge.textContent = String(count);
 }
 
