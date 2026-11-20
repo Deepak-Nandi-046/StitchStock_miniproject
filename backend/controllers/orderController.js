@@ -56,6 +56,51 @@ exports.summary = async (req, res) => {
     nextMoves: NEXT,
   });
 };
+
+exports.addProduct = async (req, res) => {
+  const body = req.body || {};
+  const name = typeof body.name === 'string' ? body.name.trim() : '';
+  const price = Number(body.price);
+  const stock = Number(body.stock);
+  const category = typeof body.category === 'string' ? body.category.trim() : '';
+  const imageUrl = typeof body.image_url === 'string' ? body.image_url.trim() : '';
+  const description = typeof body.description === 'string' ? body.description.trim() : '';
+
+  if (!name || !Number.isFinite(price) || price < 0 ||
+      !Number.isInteger(stock) || stock < 0) {
+    return res.status(400).json({ error: 'Name, valid price, and valid stock are required' });
+  }
+
+  const payload = {
+    name,
+    price,
+    stock,
+    ...(category ? { category } : {}),
+    ...(imageUrl ? { image_url: imageUrl } : {}),
+    ...(description ? { description } : {})
+  };
+
+  const { data, error } = await supabase
+    .from('products')
+    .insert(payload)
+    .select('*')
+    .single();
+
+  if (error) {
+    console.error('Supabase product insert failed:', error.message);
+    return res.status(500).json({ error: 'Could not add the product' });
+  }
+
+  db.products.push(data);
+  await recordAudit({
+    actor: req.user.id,
+    action: 'PRODUCT_ADDED',
+    entity: 'product',
+    entityId: data.id,
+    details: { name, stock, price }
+  });
+  res.status(201).json(data);
+};
 exports.queue = (req, res) => res.json(getQueue(Number(req.params.productId)));
 
 exports.restock = async (req, res) => {

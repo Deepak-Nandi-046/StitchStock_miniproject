@@ -2,13 +2,19 @@ const { sign } = require('../auth/token');
 const { recordAudit } = require('../engines/e3-audit');
 const supabase = require('../config/supabaseClient');
 
-const view = u => ({
-  id: u.id,
-  name: u.user_metadata?.name || u.email?.split('@')[0] || 'User',
-  email: u.email,
-  role: u.user_metadata?.role || u.app_metadata?.role ||
-    (u.email?.toLowerCase() === (process.env.OWNER_EMAIL || 'admin@gmail.com').toLowerCase() ? 'owner' : 'customer'),
-});
+const view = u => {
+  const email = String(u.email || '').trim().toLowerCase();
+  const configuredOwner = String(process.env.OWNER_EMAIL || '').trim().toLowerCase();
+  const ownerEmails = new Set(['admin@example.com', 'admin@gmail.com']);
+  if (configuredOwner) ownerEmails.add(configuredOwner);
+  const metadataRole = u.user_metadata?.role || u.app_metadata?.role;
+  return {
+    id: u.id,
+    name: u.user_metadata?.name || u.email?.split('@')[0] || 'User',
+    email: u.email,
+    role: metadataRole || (ownerEmails.has(email) ? 'owner' : 'customer'),
+  };
+};
 const PASSWORD_ERROR = 'Password must be 8-64 characters and include uppercase, lowercase, a number, and a special character.';
 
 const isValidPassword = password =>

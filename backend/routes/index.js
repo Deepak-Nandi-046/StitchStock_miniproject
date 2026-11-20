@@ -38,6 +38,7 @@ r.post('/orders', requireAuth, requireRole('customer'), wrap(o.placeOrder));
 r.get('/orders/mine', requireAuth, requireRole('customer'), o.myOrders);
 
 r.get('/owner/summary', ...owner, wrap(o.summary));
+r.post('/owner/products', ...owner, wrap(o.addProduct));
 r.get('/owner/queue/:productId', ...owner, o.queue);
 r.post('/owner/products/:productId/restock', ...owner, wrap(o.restock));
 r.post('/owner/queue/:productId/allocate', ...owner, wrap(o.allocate));
