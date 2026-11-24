@@ -467,6 +467,8 @@ body.login::after {
 .back-link {
   margin: 0 0 20px;
   font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
 }
 
 .otp-field input {

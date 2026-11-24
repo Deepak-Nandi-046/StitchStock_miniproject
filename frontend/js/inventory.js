@@ -10,7 +10,7 @@ async function initInventory() {
     <section class="admin-banner inventory-banner" id="inventory">
       <div>
         <h1>Inventory <em>Made with Love</em></h1>
-        <p>Manage ready products, stock, and pre-order queues</p>
+        <p>Manage the handmade product catalogue and current stock</p>
       </div>
     </section>
     <section class="admin-section">
@@ -20,7 +20,7 @@ async function initInventory() {
       </div>
       <div class="add-product-form-modal" id="addProductFormModal" hidden>
         <form class="add-product-form" id="addProductForm">
-          <h2 class="add-product-title">Add / Edit <em>Crochet Product</em></h2>
+          <h2 class="add-product-title">Add <em>Crochet Product</em></h2>
           <div class="product-image-uploader">
             <label for="newProductImageFile">
               <img id="newProductImagePreview" class="product-image-preview" src="assets/login-background.jpg" alt="Product preview">
@@ -66,6 +66,7 @@ async function initInventory() {
     </section>`;
 
   bindAddProductForm();
+  document.getElementById('refreshAdmin')?.addEventListener('click', refreshInventory);
   await refreshInventory();
 }
 
@@ -147,27 +148,23 @@ function renderInventory(products) {
     const fillClass = stock <= 2 ? 'low' : stock <= 5 ? 'warn' : 'good';
     const fillWidth = Math.min(100, stock * 10);
     const image = product.image_url || 'assets/login-background.jpg';
-    const queue = Number(product.queue) || 0;
     return `<article class="inventory-card">
       <img class="inventory-image" src="${esc(image)}" alt="${esc(product.name)}" onerror="this.onerror=null;this.style.display='none'">
       <div class="inventory-body">
         <h3>${esc(product.name)}</h3>
         <div class="inventory-meta"><span>₹${esc(Number(product.price).toLocaleString('en-IN'))}</span><span>${esc(stock)} in stock</span></div>
         <div class="stock-track"><div class="stock-fill ${fillClass}" style="width:${fillWidth}%"></div></div>
-        <div class="inventory-meta"><span>Queue: ${esc(queue)}</span></div>
         <div class="restock-row">
           <input type="number" min="1" max="100" value="5" data-restock-input="${esc(product.id)}" aria-label="Restock amount for ${esc(product.name)}">
           <button type="button" class="compact-btn" data-restock-quick="${esc(product.id)}">+5 stock</button>
           <button type="button" class="compact-btn primary" data-restock="${esc(product.id)}">Restock</button>
         </div>
-        <button type="button" class="compact-btn" style="width:100%;margin-top:6px" data-allocate="${esc(product.id)}" ${queue === 0 ? 'disabled' : ''}>Serve next in queue</button>
       </div>
     </article>`;
   }).join('');
 
   host.querySelectorAll('[data-restock]').forEach(button => button.onclick = () => restockProduct(button));
   host.querySelectorAll('[data-restock-quick]').forEach(button => button.onclick = () => restockProduct(button, 5));
-  host.querySelectorAll('[data-allocate]').forEach(button => button.onclick = () => allocateQueue(button));
 }
 
 async function restockProduct(button, quickAmount) {
@@ -180,18 +177,6 @@ async function restockProduct(button, quickAmount) {
   try {
     await api(`/owner/products/${encodeURIComponent(productId)}/restock`, 'POST', { add });
     toast('Stock updated');
-    await refreshInventory();
-  } catch (error) {
-    toast(error.message);
-    button.disabled = false;
-  }
-}
-
-async function allocateQueue(button) {
-  button.disabled = true;
-  try {
-    await api(`/owner/queue/${encodeURIComponent(button.dataset.allocate)}/allocate`, 'POST');
-    toast('Next queue item moved to In Production');
     await refreshInventory();
   } catch (error) {
     toast(error.message);

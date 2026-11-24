@@ -68,6 +68,7 @@
     <button type="button" class="social-button" id="apple"><b class="apple-logo">●</b>Continue with Apple</button>
 
     <p class="switch" id="switchRow"><span id="swText">Don't have an account?</span> <button type="button" id="tog">Create Account</button></p>
+    <p class="switch" id="roleSwitch"><a id="roleSwitchLink" href="login.html?role=owner">Admin login</a></p>
   </section>
 
   <section id="viewOtp" hidden aria-labelledby="otpHeading">
@@ -91,60 +92,15 @@
     <p class="otp-actions"><button type="button" id="resend" disabled>Resend code <span id="resendTimer"></span></button></p>
   </section>
 
-  <section id="viewForgot" hidden aria-labelledby="resetHeading">
-    <button type="button" class="back-link" id="forgotBack" aria-label="Back to login">← Back</button>
-    <div class="brand compact">
-      <img class="yarn-logo" src="assets/yarn-logo.png" alt="StitchStock yarn logo">
-      <h1><span>Stitch</span><strong>Stock</strong></h1>
-    </div>
-    <h2 id="resetHeading">Reset password</h2>
-    <p class="subtitle">Enter your registered email to receive a reset link.</p>
-    <div id="resetRequest">
-      <div class="field">
-        <label for="resetEmail">Registered email address</label>
-        <div class="input-wrap">
-          <span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="m4 7 8 6 8-6"></path></svg></span>
-          <input id="resetEmail" type="email" autocomplete="email" placeholder="Email address">
-        </div>
-      </div>
-      <p class="error" id="resetErr" role="alert"></p>
-      <button type="button" class="primary" id="sendResetOtp">Send reset link <span aria-hidden="true">→</span></button>
-      <div class="reset-link-box" id="resetLinkBox" hidden>
-        <p>For this demo, use the reference reset link below:</p>
-        <a id="resetLink" href="#">Open reset link</a>
-      </div>
-    </div>
-    <div id="resetVerify" hidden>
-      <p class="reset-note">Create a new password for your account.</p>
-      <div class="field">
-        <label for="resetPassword">New password</label>
-        <div class="input-wrap">
-          <span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>
-          <input id="resetPassword" type="password" autocomplete="new-password" maxlength="64" placeholder="New password">
-        </div>
-      </div>
-      <ul class="password-rules reset-rules">
-        <li>8–64 characters</li><li>Uppercase and lowercase letter</li><li>Number and special character</li>
-      </ul>
-      <div class="field">
-        <label for="confirmPassword">Confirm new password</label>
-        <div class="input-wrap">
-          <span class="field-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg></span>
-          <input id="confirmPassword" type="password" autocomplete="new-password" placeholder="Confirm new password">
-        </div>
-      </div>
-      <p class="error" id="resetOtpErr" role="alert"></p>
-      <button type="button" class="primary" id="changePassword">Change password <span aria-hidden="true">→</span></button>
-    </div>
-  </section>
 </main>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script src="js/api.js"></script>
 <script>
   let reg = false;
+  const requestedRole = new URLSearchParams(location.search).get('role');
+  const loginRole = requestedRole === 'owner' || requestedRole === 'customer' ? requestedRole : null;
   let challengeId = null;
-  let resetChallengeId = null;
   let resendTimerId = null;
   let resendSeconds = 30;
   const $ = id => document.getElementById(id);
@@ -167,6 +123,7 @@
     $('swText').textContent = reg ? 'Already have an account?' : "Don't have an account?";
     $('sub').textContent = reg ? 'Create a customer account to start ordering.' : 'Log in to continue your crochet journey ♡';
     $('pw').autocomplete = reg ? 'new-password' : 'current-password';
+    $('roleSwitch').hidden = reg;
   }
 
   function startResendTimer() {
@@ -208,27 +165,19 @@
     $('eye').classList.toggle('is-visible', show);
   };
   $('forgot').onclick = () => {
-    $('viewLogin').hidden = true;
-    $('viewOtp').hidden = true;
-    $('viewForgot').hidden = false;
-    $('resetHeading').textContent = 'Reset password';
-    $('resetRequest').hidden = false;
-    $('resetVerify').hidden = true;
-    $('resetLinkBox').hidden = true;
-    $('resetErr').textContent = '';
-    $('resetOtpErr').textContent = '';
-    $('resetEmail').focus();
+    location.href = `forgot-password.html?role=${encodeURIComponent(loginRole || 'customer')}`;
   };
-  $('forgotBack').onclick = () => {
-    $('viewForgot').hidden = true;
-    $('viewLogin').hidden = false;
-    $('resetEmail').value = '';
-    $('resetPassword').value = '';
-    $('confirmPassword').value = '';
-    $('resetLinkBox').hidden = true;
-    $('resetHeading').textContent = 'Reset password';
-    $('email').focus();
-  };
+  $('roleSwitchLink').href = loginRole === 'owner' ? 'login.html?role=customer' : 'login.html?role=owner';
+  $('roleSwitchLink').textContent = loginRole === 'owner' ? 'Customer login' : 'Admin login';
+  if (new URLSearchParams(location.search).get('reset') === 'success') {
+    $('err').textContent = 'Your password has been reset successfully.';
+    $('err').classList.add('success');
+  }
+  if (loginRole === 'owner') {
+    $('welcome').textContent = 'Admin Login';
+    $('sub').textContent = 'Log in to manage your StitchStock store.';
+    $('switchRow').hidden = true;
+  }
   $('google').onclick = notifyComingSoon;
   $('apple').onclick = notifyComingSoon;
 
@@ -241,64 +190,6 @@
     $('email').focus();
   };
   $('resend').onclick = () => { notifyComingSoon(); startResendTimer(); };
-
-  $('sendResetOtp').onclick = async () => {
-    const email = $('resetEmail').value.trim();
-    $('resetErr').textContent = '';
-    $('resetErr').classList.remove('success');
-    $('resetLinkBox').hidden = true;
-    if (!/^\S+@\S+\.\S+$/.test(email))
-      return $('resetErr').textContent = 'Enter a valid registered email address.';
-    $('sendResetOtp').disabled = true;
-    try {
-      const response = await api('/auth/password-reset/request', 'POST', { email });
-      resetChallengeId = response.challengeId;
-      if (response.resetLink) {
-        $('resetLink').href = response.resetLink;
-        $('resetLinkBox').hidden = false;
-        $('resetLink').onclick = event => {
-          event.preventDefault();
-          $('resetRequest').hidden = true;
-          $('resetVerify').hidden = false;
-          $('resetHeading').textContent = 'Create new password';
-          $('resetPassword').focus();
-        };
-      }
-      $('resetErr').textContent = response.message;
-      $('resetErr').classList.add('success');
-    } catch (error) {
-      $('resetErr').textContent = error.message;
-      $('resetErr').classList.remove('success');
-    } finally {
-      $('sendResetOtp').disabled = false;
-    }
-  };
-
-  $('changePassword').onclick = async () => {
-    $('resetOtpErr').classList.remove('success', 'demo-message');
-    $('resetOtpErr').textContent = '';
-    const password = $('resetPassword').value;
-    if (!isStrongPassword(password))
-      return $('resetOtpErr').textContent = passwordError;
-    if (password !== $('confirmPassword').value)
-      return $('resetOtpErr').textContent = 'Passwords do not match.';
-    $('changePassword').disabled = true;
-    try {
-      const response = await api('/auth/password-reset/complete', 'POST', {
-        challengeId: resetChallengeId,
-        password
-      });
-      $('resetOtpErr').textContent = response.message;
-      $('resetOtpErr').classList.add('success');
-      setTimeout(() => {
-        $('forgotBack').click();
-      }, 1200);
-    } catch (error) {
-      $('resetOtpErr').textContent = error.message;
-    } finally {
-      $('changePassword').disabled = false;
-    }
-  };
 
   $('f').onsubmit = async event => {
     event.preventDefault();
@@ -327,6 +218,8 @@
         showOtp(response);
         return;
       }
+      if (loginRole && response.user.role !== loginRole)
+        return msg('Wrong email or password');
       store.set(response.token, response.user);
       location.href = response.user.role === 'owner' ? 'owner.html' : 'index.html';
     } catch (error) {

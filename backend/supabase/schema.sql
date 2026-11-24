@@ -35,3 +35,26 @@ values
     (2, 'Flower Bouquet', 0, 600),
     (3, 'Mini Tote Bag', 5, 800)
 on conflict (id) do nothing;
+
+select setval(
+    pg_get_serial_sequence('public.products', 'id'),
+    coalesce((select max(id) from public.products), 1),
+    exists(select 1 from public.products)
+);
+
+insert into public.products (name, stock, price, category, image_url, description)
+select new_product.name, new_product.stock, new_product.price, new_product.category,
+       new_product.image_url, new_product.description
+from (values
+    ('Crochet Damru Keychain (Big)', 0, 250, 'Keychains', 'assets/keychain-damru-big.jpg',
+     'Handmade crochet damru keychain in the big size.'),
+    ('Crochet Damru Keychain (Small)', 0, 120, 'Keychains', 'assets/keychain-damru-small.jpg',
+     'Handmade crochet damru keychain in the small size.'),
+    ('Blue Bird Crochet Keychain', 0, 120, 'Keychains', 'assets/keychain-bluebird.jpg',
+     'Handmade blue crochet bird keychain.')
+) as new_product(name, stock, price, category, image_url, description)
+where not exists (
+    select 1
+    from public.products existing
+    where lower(existing.name) = lower(new_product.name)
+);

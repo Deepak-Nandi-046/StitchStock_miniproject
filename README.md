@@ -9,7 +9,45 @@ Login OTP email configuration: replace the sample SMTP values in `backend/.env`
 with a real SMTP account to enable email OTP login. In local development, every
 account uses the demo OTP `123456` without email delivery when `DEMO_LOGIN=true`;
 this flag is ignored in production. Registration does not require OTP verification.
-Forgot password currently uses a short-lived, one-time reference reset link shown
-in the UI for local development; it does not send an email. New and reset
-passwords must be 8-64 characters and include uppercase, lowercase, a number,
-and a special character.
+Password reset links are role-specific, expire after 15 minutes, and can only be
+used once. Configure
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, and
+`APP_BASE_URL` in `backend/.env` to send reset emails. Supabase-backed accounts
+also require `SUPABASE_SERVICE_ROLE_KEY` on the backend so reset requests can
+verify account roles securely; never expose that key to the frontend. The login
+page links to the admin login at `login.html?role=owner`. New and reset passwords
+must be 8-64 characters and include uppercase, lowercase, a number, and a
+special character.
+
+The storefront includes product discovery, gift suggestions, reviews, tracking,
+care information, and customer help. Customisation requests and reviews (including
+their attachments) are saved locally under `backend/data/` and are visible to
+the admin through the dashboard. Product inventory syncs with Supabase when
+configured. Orders and pre-order queues are saved under `backend/data/`; product
+inventory is saved locally when Supabase is unavailable.
+
+The customer navigation opens `frontend/customisation.html` for custom requests.
+Customers can track request status, read admin replies and quotations, accept or
+decline an offer, and pay a 50% advance using the existing demo UPI flow. The
+customer's payment confirmation is not verified automatically. Admins can view
+and reply to requests, set a quote and estimated completion, and update request
+status from the Custom Requests section of the owner dashboard. Request records
+and attachments are stored locally under `backend/data/`.
+
+The owner dashboard uses separate routes for Overview, Customers, Customisation
+Requests, Orders, Pre-orders, Products, Customer Messages, Reviews, Returns &
+Cancellations, and Notifications. Customer messages, return requests, reviews,
+customisation requests, and observed customer profiles are saved under
+`backend/data/`, along with order records and local product stock. The Customers
+page can show demo accounts and customers
+registered or observed through the app; it cannot enumerate Supabase accounts
+that have never used the app without a Supabase service-role integration.
+
+The customer storefront uses separate pages: `index.html` (Home), `shop.html`,
+`product.html?id=...`, `customisation.html`, `wishlist.html`, `bag.html`,
+`orders.html`, `messages.html`, and `about.html`. Product discovery, cart, and
+wishlist state are shared across these pages in the browser.
+
+The Keychains category includes the priced Damru and Blue Bird designs from the
+provided images. Their initial stock is zero until restocked. For an existing
+Supabase database, re-run `backend/supabase/schema.sql` to add these seed items.

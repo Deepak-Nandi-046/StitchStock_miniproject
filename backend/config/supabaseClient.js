@@ -7,13 +7,10 @@ const supabaseKey =
     process.env.SUPABASE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Supabase environment variables are missing');
-}
+let supabase = null;
 
-const supabase = createClient(
-    supabaseUrl,
-    supabaseKey
-);
+if (supabaseUrl && supabaseKey) {
+    supabase = createClient(supabaseUrl, supabaseKey);
+}
 
 module.exports = supabase;

@@ -3,8 +3,31 @@ const store = { get token(){ try{return localStorage.getItem('ss_token')}catch(e
   set(t,u){ try{localStorage.setItem('ss_token',t);localStorage.setItem('ss_user',JSON.stringify(u))}catch(e){} },
   clear(){ try{localStorage.removeItem('ss_token');localStorage.removeItem('ss_user')}catch(e){} } };
 
+function apiUrl(path) {
+  const apiBase = location.port === '8080' ? 'http://127.0.0.1:3000' : '';
+  return apiBase + '/api' + path;
+}
+async function openCustomRequestFile(requestId, fileId) {
+  const tab = window.open('about:blank', '_blank');
+  if (!tab) return toast('Allow pop-ups to view this attachment');
+  try {
+    const url = apiUrl(`/custom-requests/${encodeURIComponent(requestId)}/files/${encodeURIComponent(fileId)}?inline=true`);
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${store.token}` } });
+    if (!response.ok) {
+      let data = {};
+      try { data = await response.json(); } catch (error) {}
+      throw new Error(data.error || 'Could not load this attachment.');
+    }
+    const objectUrl = URL.createObjectURL(await response.blob());
+    tab.location.href = objectUrl;
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+  } catch (error) {
+    tab.close();
+    toast(error.message);
+  }
+}
 async function api(path, method='GET', body){
-  const r = await fetch('/api'+path, { method, headers:{'Content-Type':'application/json',
+  const r = await fetch(apiUrl(path), { method, headers:{'Content-Type':'application/json',
     ...(store.token?{Authorization:'Bearer '+store.token}:{})}, body: body?JSON.stringify(body):undefined });
   const raw = await r.text();
   let data = {};
