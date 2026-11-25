@@ -1,7 +1,8 @@
 const store = { get token(){ try{return localStorage.getItem('ss_token')}catch(e){return null} },
   get user(){ try{return JSON.parse(localStorage.getItem('ss_user')||'null')}catch(e){return null} },
   set(t,u){ try{localStorage.setItem('ss_token',t);localStorage.setItem('ss_user',JSON.stringify(u))}catch(e){} },
-  clear(){ try{localStorage.removeItem('ss_token');localStorage.removeItem('ss_user')}catch(e){} } };
+  clear(){ try{localStorage.removeItem('ss_token');localStorage.removeItem('ss_user');
+    ['ss_bag','ss_bag_items','ss_bag_colors','ss_wishlist'].forEach(k=>localStorage.removeItem(k))}catch(e){} } };
 
 function apiUrl(path) {
   const apiBase = location.port === '8080' ? 'http://127.0.0.1:3000' : '';

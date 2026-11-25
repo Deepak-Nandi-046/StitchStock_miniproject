@@ -18,33 +18,30 @@ body.login {
   padding: 32px clamp(80px, 14vw, 220px) 32px 16px;
   color: var(--login-plum);
   font-family: "Nunito", system-ui, sans-serif;
-  background: #f8dfe4 url("../assets/romantic-crochet-garden-banner.png") center center / cover no-repeat fixed;
+  background-color: #f8dfe4;
 }
 
 body.login::before,
 body.login::after {
   content: "";
   position: fixed;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
-  border-radius: 48% 52% 55% 45% / 42% 45% 55% 58%;
-  background: rgba(255, 190, 204, .32);
+  background-image: url("../assets/Background.jpeg");
+  background-repeat: no-repeat;
 }
 
 body.login::before {
-  width: 360px;
-  height: 300px;
-  left: -150px;
-  bottom: -100px;
-  transform: rotate(20deg);
+  background-position: center;
+  background-size: cover;
+  filter: blur(18px);
+  transform: scale(1.04);
 }
 
 body.login::after {
-  width: 330px;
-  height: 260px;
-  right: -120px;
-  top: -90px;
-  transform: rotate(-24deg);
+  background-position: center;
+  background-size: contain;
 }
 
 .login-decor {
@@ -100,13 +97,14 @@ body.login::after {
   grid-column: 2;
   justify-self: end;
   width: 420px;
-  height: min(700px, calc(100vh - 64px));
-  max-height: calc(100vh - 64px);
+  /* Grow with the content so nothing is cut off on short screens; the page scrolls instead. */
+  height: auto;
+  min-height: min(700px, calc(100vh - 64px));
   overflow: hidden;
   padding: 38px 36px 32px;
   border: 1px solid rgba(255,255,255,.72);
   border-radius: 28px;
-  background: rgba(255, 244, 241, .92);
+  background: rgba(255, 244, 241, .9);
   box-shadow: 0 20px 50px rgba(190, 80, 110, .18);
 }
 
@@ -527,19 +525,23 @@ body.login::after {
 
 .login [hidden] { display: none !important; }
 
-@media (max-width: 560px) {
+@media (max-width: 560px), (max-width: 800px) and (orientation: portrait) {
   body.login {
     grid-template-columns: 1fr;
-    place-items: center;
-    padding: 16px;
-    background-attachment: scroll;
+    place-items: start center;
+    padding: calc(56.25vw + 16px) 16px 16px;
+  }
+  body.login::after {
+    position: absolute;
+    background-position: center top;
+    background-size: 100% auto;
   }
   .login-card {
     grid-column: 1;
     justify-self: center;
-    width: 100%;
-    height: calc(100vh - 32px);
-    max-height: calc(100vh - 32px);
+    width: min(100%, 430px);
+    height: auto;
+    min-height: 0;
     overflow: hidden;
     padding: 30px 22px 26px;
   }

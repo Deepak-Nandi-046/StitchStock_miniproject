@@ -138,6 +138,7 @@ async function refreshInventory() {
 }
 
 function renderInventory(products) {
+  products = products.filter(p => p.is_active !== false);
   const host = document.getElementById('inventoryGrid');
   if (!products.length) {
     host.innerHTML = '<div class="admin-empty">No inventory items yet 🧶</div>';
@@ -155,16 +156,18 @@ function renderInventory(products) {
         <div class="inventory-meta"><span>₹${esc(Number(product.price).toLocaleString('en-IN'))}</span><span>${esc(stock)} in stock</span></div>
         <div class="stock-track"><div class="stock-fill ${fillClass}" style="width:${fillWidth}%"></div></div>
         <div class="restock-row">
-          <input type="number" min="1" max="100" value="5" data-restock-input="${esc(product.id)}" aria-label="Restock amount for ${esc(product.name)}">
-          <button type="button" class="compact-btn" data-restock-quick="${esc(product.id)}">+5 stock</button>
-          <button type="button" class="compact-btn primary" data-restock="${esc(product.id)}">Restock</button>
+          <input type="number" min="1" max="100" value="5" data-restock-input="${esc(product.id)}" aria-label="Stock amount for ${esc(product.name)}">
+          <button type="button" class="compact-btn" data-reduce="${esc(product.id)}">− Remove</button>
+          <button type="button" class="compact-btn primary" data-restock="${esc(product.id)}">+ Add</button>
+          <button type="button" class="compact-btn" style="color:#b3261e" data-delete="${esc(product.id)}" data-name="${esc(product.name)}">Delete</button>
         </div>
       </div>
     </article>`;
   }).join('');
 
   host.querySelectorAll('[data-restock]').forEach(button => button.onclick = () => restockProduct(button));
-  host.querySelectorAll('[data-restock-quick]').forEach(button => button.onclick = () => restockProduct(button, 5));
+  host.querySelectorAll('[data-reduce]').forEach(button => button.onclick = () => reduceStock(button));
+  host.querySelectorAll('[data-delete]').forEach(button => button.onclick = () => deleteProduct(button));
 }
 
 async function restockProduct(button, quickAmount) {
@@ -177,6 +180,37 @@ async function restockProduct(button, quickAmount) {
   try {
     await api(`/owner/products/${encodeURIComponent(productId)}/restock`, 'POST', { add });
     toast('Stock updated');
+    await refreshInventory();
+  } catch (error) {
+    toast(error.message);
+    button.disabled = false;
+  }
+}
+
+async function reduceStock(button) {
+  const productId = button.dataset.reduce;
+  const input = [...document.querySelectorAll('[data-restock-input]')]
+    .find(item => item.dataset.restockInput === productId);
+  const remove = Number(input?.value);
+  if (!Number.isInteger(remove) || remove < 1) return toast('Enter a valid stock amount');
+  button.disabled = true;
+  try {
+    await api(`/owner/products/${encodeURIComponent(productId)}/reduce-stock`, 'POST', { remove });
+    toast('Stock reduced');
+    await refreshInventory();
+  } catch (error) {
+    toast(error.message);
+    button.disabled = false;
+  }
+}
+
+async function deleteProduct(button) {
+  const productId = button.dataset.delete;
+  if (!confirm(`Delete "${button.dataset.name}"? It will be removed from the shop.`)) return;
+  button.disabled = true;
+  try {
+    await api(`/owner/products/${encodeURIComponent(productId)}`, 'DELETE');
+    toast('Product deleted');
     await refreshInventory();
   } catch (error) {
     toast(error.message);

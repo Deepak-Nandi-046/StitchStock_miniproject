@@ -1,13 +1,9 @@
-
 require('dotenv').config();
 
 const express = require('express');
 const path = require('path');
-const supabase = require('./config/supabaseClient');
-const db = require('./db');
-const orderStore = require('./db/orderStore');
-const localProductStore = require('./db/localProductStore');
-const { restorePreorders } = require('./engines/e1-preorder');
+const db = require('./db/pool');
+const { restoreQueuesFromDb } = require('./engines/e1-preorder/restore');
 
 const app = express();
 
@@ -21,19 +17,8 @@ app.use((req, res, next) => {
 });
 
 app.get('/health', async (req, res) => {
-    if (!supabase) {
-        return res.json({
-            status: 'degraded',
-            service: 'stitchstock-backend',
-            database: 'disconnected',
-            timestamp: new Date().toISOString(),
-            databaseError: 'Supabase environment variables are not configured'
-        });
-    }
-    const { data, error } = await supabase
-        .from('products')
-        .select('id')
-        .limit(1);
+    let error = null;
+    try { await db.query('select 1 from product limit 1'); } catch (e) { error = e; }
     res.json({
         status: error ? 'degraded' : 'ok',
         service: 'stitchstock-backend',
@@ -43,36 +28,7 @@ app.get('/health', async (req, res) => {
     });
 });
 
-// Test Supabase connection
-app.get('/api/test-supabase', async (req, res) => {
-    try {
-        const { data, error } = await supabase
-            .from('products')
-            .select('*')
-            .limit(5);
-
-        if (error) {
-            return res.status(400).json({
-                success: false,
-                message: error.message
-            });
-        }
-
-        res.json({
-            success: true,
-            message: 'Supabase connected successfully!',
-            products: data
-        });
-
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
-    }
-});
-
-// Existing API routes
+// API routes
 app.use('/api', require('./routes'));
 
 // Serve frontend
@@ -81,18 +37,21 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error(err);
-    res.status(500).json({ error: 'Server error' });
+    const status = Number(err.status) >= 400 && Number(err.status) < 600 ? Number(err.status) : 500;
+    res.status(status).json({ error: status < 500 ? err.message : (err.message || 'Server error') });
 });
 
 const port = process.env.PORT || 3000;
 
 if (require.main === module) {
-    Promise.all([orderStore.load(), supabase ? Promise.resolve(db.products) : localProductStore.load(db.products)])
-        .then(async ([orders, products]) => {
-            db.orders.splice(0, db.orders.length, ...orders);
-            if (!supabase) db.products.splice(0, db.products.length, ...products);
-            restorePreorders(db.orders);
-            if (db.orders.length) await orderStore.save(db.orders);
+    if (!db.isConfigured()) {
+        console.error('DATABASE_URL is missing in backend/.env (Supabase > Connect > Session pooler).');
+        process.exit(1);
+    }
+    db.query('select 1')
+        .then(() => restoreQueuesFromDb())
+        .then(count => {
+            console.log(`Database connected. Restored ${count} waiting pre-order(s) into the E1 queue.`);
             const server = app.listen(port, () =>
                 console.log('StitchStock on http://localhost:' + port)
             );
@@ -111,7 +70,7 @@ if (require.main === module) {
             });
         })
         .catch(error => {
-            console.error('Unable to load saved order and product data:', error);
+            console.error('Unable to connect to the database:', error.message);
             process.exit(1);
         });
 }

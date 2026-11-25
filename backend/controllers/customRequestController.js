@@ -17,6 +17,7 @@ const requestStatuses = new Set([
   'Submitted', 'Under Review', 'Need More Details', 'Offer Sent',
   'Accepted', 'Rejected', 'Order Confirmed',
 ]);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function parseAttachments(input) {
   if (input == null) return [];
@@ -96,6 +97,13 @@ exports.mine = async (req, res) => {
 
 exports.list = async (req, res) => {
   res.json(await store.listAll());
+};
+
+exports.markViewed = async (req, res) => {
+  const { requestIds } = req.body || {};
+  if (!Array.isArray(requestIds) || requestIds.some(id => typeof id !== 'string' || !UUID.test(id)))
+    return res.status(400).json({ error: 'Provide valid custom request IDs to mark as viewed.' });
+  res.json({ marked: await store.markViewed(requestIds) });
 };
 
 exports.update = async (req, res) => {

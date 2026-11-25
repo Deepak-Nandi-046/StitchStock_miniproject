@@ -1,16 +1,11 @@
-const db = require('../db');
-const { supabase } = require('../db/supabase');
+const crypto = require('crypto');
+const productStore = require('../db/productStore');
 const orderStore = require('../db/orderStore');
-const localProductStore = require('../db/localProductStore');
+const storage = require('../db/storage');
+const { isUuid } = require('../db/customerStore');
 const { enqueuePreorder, removePreorder, getQueue } = require('../engines/e1-preorder');
 const { withLock, runInTransaction } = require('../engines/e2-safety');
 const { recordAudit, listAudit } = require('../engines/e3-audit');
-const supabaseConfigured = () =>
-  Boolean((process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) && (
-    process.env.SUPABASE_PUBLISHABLE_KEY ||
-    process.env.SUPABASE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
-  ));
 
 const NEXT = {
   Placed: ['Confirmed', 'Cancelled'],
@@ -20,13 +15,16 @@ const NEXT = {
   Delivered: [],
 };
 const lockKey = id => 'product:' + id;
+const PROOF_BUCKET = 'payment-proofs';
+const EXTENSIONS = { jpeg: 'jpg', png: 'png', webp: 'webp' };
 
 function validatePaymentSubmission(input, totalAmount) {
   const payment = input || {};
   const reference = typeof payment.reference === 'string' ? payment.reference.trim() : '';
   const amountPaid = payment.amountPaid === undefined ? totalAmount : Number(payment.amountPaid);
   const proofValue = payment.proof || '';
-  let proof = '';
+  let proofBuffer = null;
+  let proofType = '';
   if (proofValue) {
     const match = typeof proofValue === 'string'
       ? proofValue.match(/^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/]+={0,2})$/)
@@ -35,31 +33,48 @@ function validatePaymentSubmission(input, totalAmount) {
     const image = Buffer.from(match[2], 'base64');
     if (!image.length || image.length > 2 * 1024 * 1024)
       return { error: 'Payment proof must be 2 MB or smaller.' };
-    proof = `data:image/${match[1]};base64,${image.toString('base64')}`;
+    proofBuffer = image;
+    proofType = match[1];
   }
   if (reference.length > 120 || !Number.isFinite(amountPaid) || amountPaid <= 0 ||
-      (!reference && !proof))
+      (!reference && !proofBuffer))
     return { error: 'Enter the amount paid and a transaction reference or payment screenshot.' };
   return {
     value: {
       method: typeof payment.method === 'string' ? payment.method.trim().slice(0, 40) || 'UPI' : 'UPI',
       reference,
       amountPaid,
-      proof,
-      submittedAt: new Date().toISOString(),
+      proofBuffer,
+      proofType,
     },
   };
 }
 
-function addCustomerUpdate(order, message, type = 'Order update') {
-  order.customerUpdates = order.customerUpdates || [];
-  order.customerUpdates.push({ type, message, at: new Date().toISOString() });
+// Uploads the screenshot to the private Storage bucket and returns its path.
+// Uploads the screenshot to the private Storage bucket and returns its path.
+// If storage is unavailable the order is still placed using the transaction reference.
+async function saveProof(customerId, value) {
+  if (!value.proofBuffer) return null;
+  const path = `${customerId}/${crypto.randomUUID()}.${EXTENSIONS[value.proofType]}`;
+  const send = () => storage.upload(PROOF_BUCKET, path, value.proofBuffer, `image/${value.proofType}`);
+  try {
+    await send();
+    return path;
+  } catch (first) {
+    try {
+      await storage.ensureBucket(PROOF_BUCKET);   // bucket may simply not exist yet
+      await send();
+      return path;
+    } catch (error) {
+      console.error('Payment proof upload failed:', error.message || first.message);
+      if (!value.reference)
+        throw Object.assign(new Error('Could not store the payment screenshot. Please enter the transaction reference and try again.'), { status: 503 });
+      return null;                                  // reference is enough for the admin to verify
+    }
+  }
 }
 
-function addStatusHistory(order, status) {
-  order.statusHistory = order.statusHistory || [];
-  order.statusHistory.push({ status, at: new Date().toISOString() });
-}
+const discardProof = path => (path ? storage.remove(PROOF_BUCKET, [path]) : null);
 
 function isValidDateOnly(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -67,42 +82,16 @@ function isValidDateOnly(value) {
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
-async function setProductStock(product, stock) {
-  if (supabaseConfigured()) {
-    const { error } = await supabase.from('products').update({ stock }).eq('id', product.id);
-    if (error) throw error;
-  } else {
-    const previousStock = product.stock;
-    product.stock = stock;
-    try {
-      await localProductStore.save(db.products);
-    } catch (error) {
-      product.stock = previousStock;
-      throw error;
-    }
-    return;
-  }
-  product.stock = stock;
-}
-
 exports.listProducts = async (req, res) => {
-  const { data, error } = await supabase
-    .from('products')
-    .select('*')
-    .order('id', { ascending: true });
-  if (error) {
-    console.error('Supabase product read failed:', error.message);
-    return res.json(db.products);
-  }
-  db.products.splice(0, db.products.length, ...(data || []));
-  res.json(db.products);
+  res.json(await productStore.list());
 };
 
 exports.placeOrder = async (req, res) => {
   const body = req.body || {};
   const { productId, qty = 1, color, giftWrap = false, giftMessage = '' } = body;
-  const p = db.products.find(x => x.id === productId);
-  if (!p || !Number.isInteger(qty) || qty < 1 || qty > 20) return res.status(400).json({ error: 'Invalid request' });
+  const p = await productStore.getById(productId);
+  if (!p || !p.is_active || !Number.isInteger(qty) || qty < 1 || qty > 20)
+    return res.status(400).json({ error: 'Invalid request' });
   if (typeof giftWrap !== 'boolean' || typeof giftMessage !== 'string' || giftMessage.length > 300)
     return res.status(400).json({ error: 'Invalid gift options' });
   const deliveryDetails = body.deliveryDetails;
@@ -119,104 +108,105 @@ exports.placeOrder = async (req, res) => {
     paymentSubmission = validated.value;
   }
   const customerId = req.user.id;
-  const order = await withLock(lockKey(productId), () =>
-    runInTransaction(async () => {
-      const id = db.orders.reduce((max, existing) => Math.max(max, Number(existing.id) || 0), 0) + 1;
-      const totalAmount = Number(p.price) * qty;
-      const o = {
-        id,
-        productId,
-        productName: p.name,
-        customerId,
-        customerName: req.user.name,
-        customerEmail: req.user.email || '',
-        qty,
-        unitPrice: Number(p.price),
-        totalAmount,
-        paymentStatus: paymentSubmission ? 'Awaiting Verification' : 'Payment Pending',
-        ...(paymentSubmission ? { paymentSubmission } : {}),
-        ...(deliveryDetails ? {
-          deliveryDetails: {
-            name: deliveryDetails.name.trim().slice(0, 100),
-            phone: deliveryDetails.phone,
-            address: deliveryDetails.address.trim().slice(0, 500),
-            pincode: deliveryDetails.pincode,
-          }
-        } : {}),
+  if (!isUuid(customerId))
+    return res.status(403).json({ error: 'Please log in with a registered account to place orders.' });
+
+  const proofPath = paymentSubmission ? await saveProof(customerId, paymentSubmission) : null;
+  let created;
+  try {
+    created = await withLock(lockKey(p.id), () => runInTransaction(async conn => {
+      const product = await productStore.getById(p.id, conn, true);      // row-locks the inventory
+      const inStock = product.stock >= qty;
+      const status = inStock ? 'Placed' : 'Pre-order Pending';
+      const orderId = await orderStore.insertOrder(conn, {
+        customerId, productId: product.id, qty,
+        unitPrice: Number(product.price),
+        totalAmount: Number(product.price) * qty,
+        status, stockReserved: inStock,
         color: typeof color === 'string' ? color.slice(0, 40) : '',
-        giftWrap,
-        giftMessage: giftWrap ? giftMessage.trim() : '',
-        createdAt: new Date().toISOString(),
-      };
-      if (p.stock >= qty) {
-        await setProductStock(p, p.stock - qty);
-        o.stockReserved = true;
-        o.status = 'Placed';
-        addCustomerUpdate(o, 'Your order was placed and is waiting for confirmation.');
+        giftWrap, giftMessage: giftWrap ? giftMessage.trim() : '',
+        delivery: deliveryDetails ? {
+          name: deliveryDetails.name.trim().slice(0, 100),
+          phone: deliveryDetails.phone,
+          address: deliveryDetails.address.trim().slice(0, 500),
+          pincode: deliveryDetails.pincode,
+        } : null,
+      });
+      let preorderId = null;
+      if (inStock) {
+        await productStore.adjustStock(product.id, -qty, conn);
+        await orderStore.addUpdate(conn, orderId, 'Your order was placed and is waiting for confirmation.');
       } else {
-        Object.assign(o, enqueuePreorder({ productId, customerId, qty }), {
-          isPreorder: true,
-          preorderStatus: 'Pending',
-          expectedAvailability: '',
-          status: 'Pre-order Pending',
-        });
-        addCustomerUpdate(o, 'Your pre-order was received and is waiting for confirmation.', 'Pre-order update');
+        preorderId = await orderStore.insertPreorder(conn, { customerId, productId: product.id, orderId, qty });
+        await orderStore.addUpdate(conn, orderId, 'Your pre-order was received and is waiting for confirmation.', 'Pre-order update');
       }
-      o.statusHistory = [{ status: o.status, at: o.createdAt }];
-      db.orders.push(o);
-      try {
-        await orderStore.save(db.orders);
-      } catch (error) {
-        db.orders.pop();
-        if (o.isPreorder) removePreorder(productId, o.preorderId);
-        else await setProductStock(p, p.stock + qty);
-        throw error;
-      }
-      await recordAudit({ actor: customerId, action: o.isPreorder ? 'PREORDER_PLACED' : 'ORDER_PLACED',
-                          entity: 'order', entityId: o.id, details: { productId, qty } });
-      return o;
+      await orderStore.addHistory(conn, orderId, status);
+      if (paymentSubmission) await orderStore.insertPayment(conn, orderId, { ...paymentSubmission, proofPath });
+      await recordAudit({
+        actor: customerId, action: inStock ? 'ORDER_PLACED' : 'PREORDER_PLACED',
+        entity: 'order', entityId: orderId, details: { productId: product.id, qty },
+      }, conn);
+      return { orderId, preorderId, productId: product.id };
     }));
-  res.status(201).json(order);
+  } catch (error) {
+    await discardProof(proofPath);
+    throw error;
+  }
+  // E1 keeps the FIFO queue in memory; update it only after the DB commit succeeded.
+  if (created.preorderId)
+    enqueuePreorder({ productId: created.productId, customerId, qty, preorderId: created.preorderId });
+  res.status(201).json(await orderStore.getById(created.orderId));
 };
 
-exports.myOrders = (req, res) =>
-  res.json(db.orders.filter(o => o.customerId === req.user.id)
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+exports.myOrders = async (req, res) => res.json(await orderStore.listForCustomer(req.user.id));
 
 // ---------- owner ----------
 exports.summary = async (req, res) => {
+  const [products, orders, audit] = await Promise.all([
+    productStore.list({ includeInactive: true }), orderStore.listAll(), listAudit(30),
+  ]);
   res.json({
-    products: db.products.map(p => ({ ...p, queue: getQueue(p.id).length })),
-    orders: [...db.orders].reverse(),
-    audit: await listAudit(30),
+    products: products.map(p => ({ ...p, queue: getQueue(p.id).length })),
+    orders,
+    audit,
     nextMoves: NEXT,
   });
 };
 
 exports.submitPayment = async (req, res) => {
-  const order = findOrder(req.params.orderId);
+  const order = await orderStore.getById(req.params.orderId);
   if (!order || String(order.customerId) !== String(req.user.id))
     return res.status(404).json({ error: 'Order not found.' });
   if (order.paymentStatus === 'Verified / Paid')
     return res.status(409).json({ error: 'This order payment has already been verified.' });
   const validated = validatePaymentSubmission(req.body, Number(order.totalAmount));
   if (validated.error) return res.status(400).json({ error: validated.error });
-  const previous = JSON.parse(JSON.stringify(order));
+
+  const proofPath = await saveProof(req.user.id, validated.value);
+  let result;
   try {
-    order.paymentSubmission = validated.value;
-    order.paymentStatus = 'Awaiting Verification';
-    order.paymentRejectionReason = '';
-    addCustomerUpdate(order, 'Payment submitted and awaiting admin verification.', 'Payment update');
-    await orderStore.save(db.orders);
-    res.json(order);
+    result = await runInTransaction(async conn => {
+      await orderStore.lockOrder(conn, order.id);
+      const latest = await orderStore.latestPayment(conn, order.id);
+      if (latest && latest.payment_status === 'Verified / Paid')
+        return { error: 'This order payment has already been verified.', status: 409 };
+      await orderStore.insertPayment(conn, order.id, { ...validated.value, proofPath });
+      await orderStore.addUpdate(conn, order.id, 'Payment submitted and awaiting admin verification.', 'Payment update');
+      return {};
+    });
   } catch (error) {
-    Object.assign(order, previous);
+    await discardProof(proofPath);
     throw error;
   }
+  if (result.error) {
+    await discardProof(proofPath);
+    return res.status(result.status).json({ error: result.error });
+  }
+  res.json(await orderStore.getById(order.id));
 };
 
 exports.verifyPayment = async (req, res) => {
-  const order = findOrder(req.params.orderId);
+  const order = await orderStore.getById(req.params.orderId);
   if (!order) return res.status(404).json({ error: 'Order not found.' });
   const body = req.body || {};
   if (!['approve', 'reject'].includes(body.action))
@@ -224,31 +214,28 @@ exports.verifyPayment = async (req, res) => {
   const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
   if (body.action === 'reject' && (!reason || reason.length > 500))
     return res.status(400).json({ error: 'Add a rejection reason of up to 500 characters.' });
-  if (order.paymentStatus !== 'Awaiting Verification' || !order.paymentSubmission)
-    return res.status(409).json({ error: 'This order has no payment awaiting verification.' });
 
-  const previous = JSON.parse(JSON.stringify(order));
-  try {
-    const now = new Date().toISOString();
-    order.paymentStatus = body.action === 'approve' ? 'Verified / Paid' : 'Rejected';
-    order.paymentVerifiedAt = body.action === 'approve' ? now : null;
-    order.paymentRejectionReason = body.action === 'reject' ? reason : '';
-    addCustomerUpdate(order, body.action === 'approve'
+  const approve = body.action === 'approve';
+  const result = await runInTransaction(async conn => {
+    await orderStore.lockOrder(conn, order.id);
+    const latest = await orderStore.latestPayment(conn, order.id);
+    if (!latest || latest.payment_status !== 'Awaiting Verification')
+      return { error: 'This order has no payment awaiting verification.', status: 409 };
+    await orderStore.reviewPayment(conn, latest.payment_id, {
+      status: approve ? 'Verified / Paid' : 'Rejected', reason: approve ? null : reason,
+    });
+    if (approve) await orderStore.setOrderFields(conn, order.id, { paidAmount: latest.amount });
+    await orderStore.addUpdate(conn, order.id, approve
       ? 'Payment Verified / Paid. Your order can proceed to processing.'
       : `Payment rejected: ${reason}. Please update your payment details and submit again.`, 'Payment update');
-    await orderStore.save(db.orders);
     await recordAudit({
-      actor: req.user.id,
-      action: body.action === 'approve' ? 'PAYMENT_VERIFIED' : 'PAYMENT_REJECTED',
-      entity: 'order',
-      entityId: order.id,
-      details: body.action === 'reject' ? { reason } : {},
-    });
-    res.json(order);
-  } catch (error) {
-    Object.assign(order, previous);
-    throw error;
-  }
+      actor: req.user.id, action: approve ? 'PAYMENT_VERIFIED' : 'PAYMENT_REJECTED',
+      entity: 'order', entityId: order.id, details: approve ? {} : { reason },
+    }, conn);
+    return {};
+  });
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.json(await orderStore.getById(order.id));
 };
 
 exports.addProduct = async (req, res) => {
@@ -264,163 +251,94 @@ exports.addProduct = async (req, res) => {
       !Number.isInteger(stock) || stock < 0) {
     return res.status(400).json({ error: 'Name, valid price, and valid stock are required' });
   }
-
-  const payload = {
-    name,
-    price,
-    stock,
-    ...(category ? { category } : {}),
-    ...(imageUrl ? { image_url: imageUrl } : {}),
-    ...(description ? { description } : {})
-  };
-
-  if (!supabaseConfigured()) {
-    const id = db.products.reduce((max, product) => Math.max(max, Number(product.id) || 0), 0) + 1;
-    const added = { id, ...payload };
-    db.products.push(added);
-    try {
-      await localProductStore.save(db.products);
-      await recordAudit({
-        actor: req.user.id,
-        action: 'PRODUCT_ADDED',
-        entity: 'product',
-        entityId: id,
-        details: { name, stock, price }
-      });
-    } catch (error) {
-      db.products.pop();
-      throw error;
-    }
-    return res.status(201).json(added);
-  }
-
-  let data = null;
-  let error = null;
-
-  const extendedInsert = await supabase
-    .from('products')
-    .insert(payload)
-    .select('*')
-    .single();
-  data = extendedInsert.data;
-  error = extendedInsert.error;
-
-  if (error) {
-    // Existing databases may not have the optional category/image/description columns yet.
-    const baseInsert = await supabase
-      .from('products')
-      .insert({ name, price, stock })
-      .select('*')
-      .single();
-    data = baseInsert.data;
-    error = baseInsert.error;
-  }
-
-  if (error) {
-    console.error('Supabase product insert failed:', error.message);
-    return res.status(500).json({ error: 'Could not add the product' });
-  }
-
-  const addedProduct = {
-    ...data,
-    ...(category ? { category } : {}),
-    ...(imageUrl ? { image_url: imageUrl } : {}),
-    ...(description ? { description } : {})
-  };
-  db.products.push(addedProduct);
+  const added = await productStore.create({ name, price, stock, category, image_url: imageUrl, description });
   await recordAudit({
-    actor: req.user.id,
-    action: 'PRODUCT_ADDED',
-    entity: 'product',
-    entityId: data.id,
-    details: { name, stock, price }
+    actor: req.user.id, action: 'PRODUCT_ADDED', entity: 'product', entityId: added.id,
+    details: { name, stock, price },
   });
-  res.status(201).json(data);
+  res.status(201).json(added);
 };
+
 exports.queue = (req, res) => res.json(getQueue(Number(req.params.productId)));
 
 exports.restock = async (req, res) => {
   const id = Number(req.params.productId), add = req.body && req.body.add;
-  const p = db.products.find(x => x.id === id);
+  const p = await productStore.getById(id);
   if (!p || !Number.isInteger(add) || add < 1) return res.status(400).json({ error: 'Invalid request' });
-  const out = await withLock(lockKey(id), async () => {
-    const stock = Number(p.stock) + add;
-    await setProductStock(p, stock);
-    await recordAudit({ actor: req.user.id, action: 'RESTOCK', entity: 'product', entityId: id, details: { add } });
-    return p;
-  });
-  res.json(out);
+  await withLock(lockKey(id), () => runInTransaction(async conn => {
+    await productStore.getById(id, conn, true);
+    await productStore.adjustStock(id, add, conn);
+    await recordAudit({ actor: req.user.id, action: 'RESTOCK', entity: 'product', entityId: id, details: { add } }, conn);
+  }));
+  res.json(await productStore.getById(id));
 };
 
-function findOrder(orderId) {
-  return db.orders.find(order => String(order.id) === String(orderId));
-}
+exports.reduceStock = async (req, res) => {
+  const id = Number(req.params.productId), remove = req.body && req.body.remove;
+  const p = await productStore.getById(id);
+  if (!p || !Number.isInteger(remove) || remove < 1) return res.status(400).json({ error: 'Invalid request' });
+  const result = await withLock(lockKey(id), () => runInTransaction(async conn => {
+    await productStore.getById(id, conn, true);
+    const left = await productStore.adjustStock(id, -remove, conn);
+    if (left === null) return { error: `Only ${p.stock} in stock; cannot remove ${remove}.` };
+    await recordAudit({ actor: req.user.id, action: 'STOCK_REDUCED', entity: 'product', entityId: id, details: { remove } }, conn);
+    return {};
+  }));
+  if (result.error) return res.status(409).json({ error: result.error });
+  res.json(await productStore.getById(id));
+};
 
-function updateQueuePositions(productId) {
-  getQueue(productId).forEach(item => {
-    const queuedOrder = db.orders.find(order => String(order.preorderId) === String(item.preorderId));
-    if (queuedOrder) queuedOrder.queuePosition = item.position;
+exports.deleteProduct = async (req, res) => {
+  const id = Number(req.params.productId);
+  const p = await productStore.getById(id);
+  if (!p || !p.is_active) return res.status(404).json({ error: 'Product not found' });
+  await productStore.deactivate(id);
+  await recordAudit({
+    actor: req.user.id, action: 'PRODUCT_DELETED', entity: 'product', entityId: id,
+    details: { name: p.name },
   });
-}
+  res.json({ ok: true, id });
+};
 
-async function makePreorderReady(order, actor) {
-  return withLock(lockKey(order.productId), async () => {
-    const product = db.products.find(item => String(item.id) === String(order.productId));
+async function makePreorderReady(orderRef, actor) {
+  const first = await orderStore.getById(orderRef);
+  if (!first) return { error: 'Pre-order not found.', status: 404 };
+  const result = await withLock(lockKey(first.productId), () => runInTransaction(async conn => {
+    const product = await productStore.getById(first.productId, conn, true);
     if (!product) return { error: 'Product not found.', status: 404 };
+    await orderStore.lockOrder(conn, first.id);
+    const order = await orderStore.getById(first.id, conn);
     if (!order.isPreorder || order.preorderStatus !== 'Confirmed')
       return { error: 'Confirm this pre-order before marking it ready.', status: 409 };
     if (Number(product.stock) < order.qty)
       return { error: `Only ${product.stock} item(s) are in stock; ${order.qty} are required.`, status: 409 };
 
-    const previousOrder = JSON.parse(JSON.stringify(order));
-    const previousStock = Number(product.stock);
-    const removed = removePreorder(order.productId, order.preorderId);
-    updateQueuePositions(order.productId);
-    try {
-      await setProductStock(product, previousStock - order.qty);
-      order.stockReserved = true;
-      order.preorderStatus = 'Available';
-      order.status = 'Preparing';
-      order.readyAt = new Date().toISOString();
-      addStatusHistory(order, order.status);
-      addCustomerUpdate(order, `${order.productName} is available and preparation has started.`, 'Pre-order available');
-      await orderStore.save(db.orders);
-      await recordAudit({ actor, action: 'PREORDER_READY', entity: 'order', entityId: order.id });
-      return { order };
-    } catch (error) {
-      Object.assign(order, previousOrder);
-      if (removed) {
-        const restored = enqueuePreorder({
-          productId: order.productId,
-          customerId: order.customerId,
-          qty: order.qty,
-          preorderId: previousOrder.preorderId,
-        });
-        order.preorderId = restored.preorderId;
-        order.queuePosition = restored.queuePosition;
-        updateQueuePositions(order.productId);
-      }
-      if (Number(product.stock) !== previousStock) await setProductStock(product, previousStock);
-      throw error;
-    }
-  });
+    await productStore.adjustStock(product.id, -order.qty, conn);
+    await orderStore.setPreorder(conn, order.id, { eligibility: 'Confirmed', allocation: 'Allocated', readyAt: new Date() });
+    await orderStore.setOrderFields(conn, order.id, { status: 'Preparing', stockReserved: true });
+    await orderStore.addHistory(conn, order.id, 'Preparing');
+    await orderStore.addUpdate(conn, order.id, `${order.productName} is available and preparation has started.`, 'Pre-order available');
+    await recordAudit({ actor, action: 'PREORDER_READY', entity: 'order', entityId: order.id }, conn);
+    return { productId: order.productId, preorderId: order.preorderId };
+  }));
+  if (result.error) return result;
+  removePreorder(result.productId, result.preorderId);     // leaves the E1 queue only after commit
+  return { order: await orderStore.getById(first.id) };
 }
 
 exports.allocate = async (req, res) => {
   const productId = Number(req.params.productId);
-  const nextConfirmed = getQueue(productId).find(item => {
-    const order = db.orders.find(record => String(record.preorderId) === String(item.preorderId));
-    return order && order.preorderStatus === 'Confirmed';
-  });
-  if (!nextConfirmed) return res.status(409).json({ error: 'There are no confirmed pre-orders waiting for this product.' });
-  const order = db.orders.find(record => String(record.preorderId) === String(nextConfirmed.preorderId));
-  const result = await makePreorderReady(order, req.user.id);
+  const queue = getQueue(productId);                        // E1 decides FIFO order
+  const confirmed = await orderStore.confirmedFromQueue(queue.map(item => item.preorderId));
+  const nextOrderId = queue.map(item => confirmed.get(item.preorderId)).find(Boolean);
+  if (!nextOrderId) return res.status(409).json({ error: 'There are no confirmed pre-orders waiting for this product.' });
+  const result = await makePreorderReady(nextOrderId, req.user.id);
   if (result.error) return res.status(result.status).json({ error: result.error });
   res.json(result.order);
 };
 
 exports.updateOrder = async (req, res) => {
-  const order = findOrder(req.params.orderId);
+  const order = await orderStore.getById(req.params.orderId);
   if (!order) return res.status(404).json({ error: 'Order not found.' });
   if (order.isPreorder && order.preorderStatus !== 'Available')
     return res.status(409).json({ error: 'Manage this order from Pre-orders.' });
@@ -448,37 +366,35 @@ exports.updateOrder = async (req, res) => {
     if (result.error) return res.status(result.status).json({ error: result.error });
   }
 
-  const previous = JSON.parse(JSON.stringify(order));
-  try {
+  await runInTransaction(async conn => {
+    await orderStore.lockOrder(conn, order.id);
     if (status && status !== order.status && status !== 'Cancelled') {
-      const previousStatus = order.status;
-      order.status = status;
-      addStatusHistory(order, status);
-      addCustomerUpdate(order, `Your order status is now ${status}.`);
-      await recordAudit({ actor: req.user.id, action: 'ORDER_STATUS_CHANGED', entity: 'order', entityId: order.id, details: { from: previousStatus, to: status } });
+      await orderStore.setOrderFields(conn, order.id, { status });
+      await orderStore.addHistory(conn, order.id, status);
+      await orderStore.addUpdate(conn, order.id, `Your order status is now ${status}.`);
+      await recordAudit({ actor: req.user.id, action: 'ORDER_STATUS_CHANGED', entity: 'order', entityId: order.id,
+                          details: { from: order.status, to: status } }, conn);
     }
     if (trackingNumber !== undefined && trackingNumber.trim() !== (order.trackingNumber || '')) {
-      order.trackingNumber = trackingNumber.trim();
-      addCustomerUpdate(order, order.trackingNumber
-        ? `Shipping tracking number: ${order.trackingNumber}.`
+      const value = trackingNumber.trim();
+      await orderStore.setOrderFields(conn, order.id, { trackingNumber: value });
+      await orderStore.addUpdate(conn, order.id, value
+        ? `Shipping tracking number: ${value}.`
         : 'Shipping tracking information was removed.', 'Shipping update');
     }
     if (carrier !== undefined && carrier.trim() !== (order.carrier || '')) {
-      order.carrier = carrier.trim();
-      if (order.carrier) addCustomerUpdate(order, `Your parcel will ship with ${order.carrier}.`, 'Shipping update');
+      const value = carrier.trim();
+      await orderStore.setOrderFields(conn, order.id, { carrier: value });
+      if (value) await orderStore.addUpdate(conn, order.id, `Your parcel will ship with ${value}.`, 'Shipping update');
     }
-    await orderStore.save(db.orders);
-    res.json(order);
-  } catch (error) {
-    Object.assign(order, previous);
-    throw error;
-  }
+  });
+  res.json(await orderStore.getById(order.id));
 };
 
 exports.setStatus = exports.updateOrder;
 
 exports.updatePreorder = async (req, res) => {
-  const order = findOrder(req.params.orderId);
+  const order = await orderStore.getById(req.params.orderId);
   if (!order || !order.isPreorder) return res.status(404).json({ error: 'Pre-order not found.' });
   const body = req.body || {};
   const status = body.status;
@@ -495,82 +411,56 @@ exports.updatePreorder = async (req, res) => {
       !isValidDateOnly(body.expectedAvailability))
     return res.status(400).json({ error: 'Enter a valid expected availability date.' });
 
-  const previous = JSON.parse(JSON.stringify(order));
-  try {
+  let leaveQueue = false;
+  await runInTransaction(async conn => {
+    await orderStore.lockOrder(conn, order.id);
     if (status && status !== order.preorderStatus) {
-      const before = order.preorderStatus;
-      order.preorderStatus = status;
-      order.status = `Pre-order ${status}`;
-      addStatusHistory(order, order.status);
-      addCustomerUpdate(order,
+      const [eligibility, allocation] = status === 'Confirmed' ? ['Confirmed', 'Waiting'] : ['Rejected', 'Cancelled'];
+      await orderStore.setPreorder(conn, order.id, { eligibility, allocation });
+      await orderStore.setOrderFields(conn, order.id, { status: `Pre-order ${status}` });
+      await orderStore.addHistory(conn, order.id, `Pre-order ${status}`);
+      await orderStore.addUpdate(conn, order.id,
         status === 'Confirmed' ? 'Your pre-order has been confirmed.' : 'Your pre-order was rejected. Please contact us about payment.',
         'Pre-order update');
-      if (status === 'Rejected') {
-        removePreorder(order.productId, order.preorderId);
-        updateQueuePositions(order.productId);
-      }
-      await recordAudit({ actor: req.user.id, action: `PREORDER_${status.toUpperCase()}`, entity: 'order', entityId: order.id, details: { from: before, to: status } });
+      await recordAudit({ actor: req.user.id, action: `PREORDER_${status.toUpperCase()}`, entity: 'order', entityId: order.id,
+                          details: { from: order.preorderStatus, to: status } }, conn);
+      leaveQueue = status === 'Rejected';
     }
     if (body.expectedAvailability !== undefined && body.expectedAvailability !== order.expectedAvailability) {
-      order.expectedAvailability = body.expectedAvailability;
+      await orderStore.setPreorder(conn, order.id, { expectedAvailability: body.expectedAvailability || null });
       if (body.expectedAvailability)
-        addCustomerUpdate(order, `Expected availability is ${body.expectedAvailability}.`, 'Pre-order availability');
+        await orderStore.addUpdate(conn, order.id, `Expected availability is ${body.expectedAvailability}.`, 'Pre-order availability');
     }
-    await orderStore.save(db.orders);
-    res.json(order);
-  } catch (error) {
-    Object.assign(order, previous);
-    if (status === 'Rejected' && ['Pending', 'Confirmed'].includes(previous.preorderStatus)) {
-      enqueuePreorder({
-        productId: previous.productId,
-        customerId: previous.customerId,
-        qty: previous.qty,
-        preorderId: previous.preorderId,
-      });
-      updateQueuePositions(previous.productId);
-    }
-    throw error;
-  }
+  });
+  if (leaveQueue) removePreorder(order.productId, order.preorderId);
+  res.json(await orderStore.getById(order.id));
 };
 
 exports.markPreorderReady = async (req, res) => {
-  const order = findOrder(req.params.orderId);
-  if (!order) return res.status(404).json({ error: 'Pre-order not found.' });
-  const result = await makePreorderReady(order, req.user.id);
+  const result = await makePreorderReady(req.params.orderId, req.user.id);
   if (result.error) return res.status(result.status).json({ error: result.error });
   res.json(result.order);
 };
 
 exports.cancelConfirmedOrder = async (orderId, actor) => {
-  const order = findOrder(orderId);
-  if (!order) return { error: 'Order not found in the current order records.', status: 404 };
-  if ((order.isPreorder && order.preorderStatus !== 'Available') ||
-      !(NEXT[order.status] || []).includes('Cancelled'))
-    return { error: `Cannot cancel an order in "${order.status}" status.`, status: 409 };
-  await withLock(lockKey(order.productId), async () => {
-    const product = db.products.find(item => String(item.id) === String(order.productId));
-    const previous = JSON.parse(JSON.stringify(order));
-    const previousStock = product && Number(product.stock);
-    try {
-      if (product && order.stockReserved) await setProductStock(product, previousStock + order.qty);
-      order.status = 'Cancelled';
-      order.stockReserved = false;
-      if (order.isPreorder) order.preorderStatus = 'Cancelled';
-      addStatusHistory(order, 'Cancelled');
-      addCustomerUpdate(order, 'Your order was cancelled.', 'Order update');
-      await orderStore.save(db.orders);
-      await recordAudit({
-        actor,
-        action: 'ORDER_CANCELLED',
-        entity: 'order',
-        entityId: order.id,
-        details: { from: previous.status, to: 'Cancelled' },
-      });
-    } catch (error) {
-      Object.assign(order, previous);
-      if (product && Number(product.stock) !== previousStock) await setProductStock(product, previousStock);
-      throw error;
-    }
-  });
-  return { order };
+  const first = await orderStore.getById(orderId);
+  if (!first) return { error: 'Order not found in the current order records.', status: 404 };
+  const result = await withLock(lockKey(first.productId), () => runInTransaction(async conn => {
+    await productStore.getById(first.productId, conn, true);
+    await orderStore.lockOrder(conn, first.id);
+    const order = await orderStore.getById(first.id, conn);          // re-read under the lock
+    if ((order.isPreorder && order.preorderStatus !== 'Available') ||
+        !(NEXT[order.status] || []).includes('Cancelled'))
+      return { error: `Cannot cancel an order in "${order.status}" status.`, status: 409 };
+    if (order.stockReserved) await productStore.adjustStock(order.productId, order.qty, conn);
+    await orderStore.setOrderFields(conn, order.id, { status: 'Cancelled', stockReserved: false });
+    if (order.isPreorder) await orderStore.setPreorder(conn, order.id, { allocation: 'Cancelled' });
+    await orderStore.addHistory(conn, order.id, 'Cancelled');
+    await orderStore.addUpdate(conn, order.id, 'Your order was cancelled.', 'Order update');
+    await recordAudit({ actor, action: 'ORDER_CANCELLED', entity: 'order', entityId: order.id,
+                        details: { from: order.status, to: 'Cancelled' } }, conn);
+    return {};
+  }));
+  if (result.error) return result;
+  return { order: await orderStore.getById(first.id) };
 };

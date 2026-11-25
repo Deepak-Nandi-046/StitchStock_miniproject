@@ -875,6 +875,14 @@
 .admin-message-list .admin-panel,
 .admin-review-list .admin-panel,
 .admin-return-list .admin-panel { margin-top: 0; }
+.return-evidence { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.return-evidence img,
+.return-evidence video { display: block; width: min(240px, 100%); max-height: 220px; border: 1px solid var(--border); border-radius: 10px; background: #fff; object-fit: contain; }
+.return-rejection-reason { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--plum); }
+.return-rejection-form { display: grid; gap: 8px; margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff8f9; }
+.return-rejection-form[hidden] { display: none; }
+.return-rejection-form label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 800; }
+.return-rejection-form textarea { width: 100%; min-height: 80px; padding: 9px; border: 1px solid var(--border); border-radius: 9px; color: var(--plum); font: inherit; resize: vertical; }
 .admin-message-copy { white-space: pre-wrap; }
 .admin-message-reply { display: grid; gap: 8px; margin-top: 12px; }
 .admin-message-reply label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 800; }
@@ -915,7 +923,6 @@
 .payment-rejection { color: #a32042; font-size: 13px; font-weight: 800; }
 .admin-payment-list { display: grid; gap: 10px; }
 .admin-payment-list .admin-panel { margin-top: 0; }
-.nav-unread-count { display: inline-grid; min-width: 18px; height: 18px; place-items: center; margin-left: 4px; padding: 0 5px; border-radius: 99px; color: #fff; background: var(--raspberry); font-size: 10px; }
 .review-rating { color: #c17b2f; letter-spacing: 2px; white-space: nowrap; }
 .admin-review-photo { display: block; max-width: min(320px,100%); max-height: 260px; margin-top: 10px; border: 1px solid var(--border); border-radius: 12px; object-fit: cover; }
 .admin-notification-card { display: grid; grid-template-columns: 36px minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 12px; border: 1px solid var(--border); border-radius: 13px; color: var(--plum); background: #fff; box-shadow: 0 5px 14px rgba(122,61,82,.05); text-decoration: none; }

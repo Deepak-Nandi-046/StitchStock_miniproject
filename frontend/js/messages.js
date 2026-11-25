@@ -8,7 +8,7 @@ function initCustomerMessages() {
     <section class="page-heading"><p class="customisation-kicker">We are here to help</p><h1>Chat with <em>Admin</em></h1>
       <p>Send a message and continue your conversation whenever you need us.</p></section>
     <section class="customer-chat-card">
-      <header class="customer-chat-heading"><div><h2>Stitch &amp; Stole</h2><p id="customerChatStatus">Loading conversation…</p></div><span class="chat-unread-count" id="customerUnreadCount" hidden></span></header>
+      <header class="customer-chat-heading"><div><h2>StitchStock Support</h2><p id="customerChatStatus">Loading conversation…</p></div><span class="chat-unread-count" id="customerUnreadCount" hidden></span></header>
       <div class="chat-transcript customer-chat-transcript" id="customerChatTranscript"><div class="empty-state">Loading messages… 🧶</div></div>
       <form class="customer-chat-compose" id="customerChatForm">
         <label class="sr-only" for="customerChatText">Your message</label>
@@ -44,6 +44,7 @@ async function loadCustomerMessages() {
   const transcript = document.getElementById('customerChatTranscript');
   try {
     customerConversation = await api('/messages/mine');
+    if (typeof refreshCustomerUnreadBadge === 'function') refreshCustomerUnreadBadge();
     const messages = customerConversation ? customerConversation.messages : [];
     document.getElementById('customerChatStatus').textContent = messages.length
       ? 'Your messages are saved and will be here when you return.'
@@ -54,7 +55,7 @@ async function loadCustomerMessages() {
     badge.textContent = unread ? `${unread} unread` : '';
     transcript.innerHTML = messages.length ? messages.map(message => `<article class="chat-bubble ${message.sender === 'customer' ? 'sent' : 'received'}">
       <p>${esc(message.text)}</p><time>${esc(new Date(message.at).toLocaleString('en-IN'))}${message.subject ? ` · ${esc(message.subject)}` : ''}</time>
-      ${message.sender === 'customer' ? `<small>${message.readByAdmin ? 'Read by admin' : 'Sent'}</small>` : '<small>Stitch &amp; Stole</small>'}
+      ${message.sender === 'customer' ? `<small>${message.readByAdmin ? 'Read by admin' : 'Sent'}</small>` : '<small>StitchStock Support</small>'}
     </article>`).join('') : '<div class="empty-state">No messages yet. Say hello whenever you need help.</div>';
     transcript.scrollTop = transcript.scrollHeight;
   } catch (error) {

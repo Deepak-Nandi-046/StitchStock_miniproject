@@ -1,4 +1,4 @@
-const db = require('../db');
+const productStore = require('../db/productStore');
 const store = require('../db/reviewStore');
 
 exports.list = async (req, res) => {
@@ -7,7 +7,7 @@ exports.list = async (req, res) => {
 
 exports.create = async (req, res) => {
   const productId = Number(req.params.productId);
-  const product = db.products.find(item => Number(item.id) === productId);
+  const product = await productStore.getById(productId);
   const { rating, text = '', photo = '' } = req.body || {};
   const reviewText = typeof text === 'string' ? text.trim() : '';
   if (!product || !Number.isInteger(rating) || rating < 1 || rating > 5)

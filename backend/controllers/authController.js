@@ -5,7 +5,6 @@ const users = require('../auth/users');
 const customerStore = require('../db/customerStore');
 const profileStore = require('../db/profileStore');
 const { createClient } = require('@supabase/supabase-js');
-const { supabase: supabaseDb } = require('../db/supabase');
 const passwordResetTokens = require('../auth/passwordResetTokens');
 const { sendPasswordResetLink } = require('../auth/mailer');
 
@@ -18,19 +17,13 @@ const seedDemoUsers = () => {
 };
 seedDemoUsers();
 
-const view = u => {
-  const email = String(u.email || '').trim().toLowerCase();
-  const configuredOwner = String(process.env.OWNER_EMAIL || '').trim().toLowerCase();
-  const ownerEmails = new Set(['admin@example.com', 'admin@gmail.com']);
-  if (configuredOwner) ownerEmails.add(configuredOwner);
-  const metadataRole = u.user_metadata?.role || u.app_metadata?.role;
-  return {
-    id: u.id,
-    name: u.user_metadata?.name || u.email?.split('@')[0] || 'User',
-    email: u.email,
-    role: ownerEmails.has(email) ? 'owner' : (metadataRole || 'customer'),
-  };
-};
+// Role comes ONLY from public.user_profile (set by a DB trigger / promoted manually in SQL).
+const view = async u => ({
+  id: u.id,
+  name: u.user_metadata?.name || u.email?.split('@')[0] || 'User',
+  email: u.email,
+  role: (await customerStore.getRole(u.id)) || 'customer',
+});
 const PASSWORD_ERROR = 'Password must be 8-64 characters and include uppercase, lowercase, a number, and a special character.';
 
 const isValidPassword = password =>
@@ -98,8 +91,9 @@ exports.login = async (req, res) => {
   if (error || !data.user || !data.session)
     return res.status(401).json({ error: 'Wrong email or password' });
 
+  await customerStore.ensureFromAuth(data.user);     // creates user_profile/customer rows if missing
   const savedProfile = await profileStore.get(data.user.id, {});
-  const u = view(data.user);
+  const u = await view(data.user);
   if (savedProfile.name) u.name = savedProfile.name;
   if (savedProfile.email) u.email = savedProfile.email;
   if (savedProfile.avatarUrl) u.avatarUrl = savedProfile.avatarUrl;
@@ -133,7 +127,7 @@ exports.register = async (req, res) => {
   const { data, error } = await supabase.auth.signUp({
     email: email.trim().toLowerCase(),
     password,
-    options: { data: { name: name.trim(), role: 'customer' } },
+    options: { data: { name: name.trim() } },
   });
   if (error) {
     if (error.status === 422 || /already/i.test(error.message))
@@ -185,7 +179,7 @@ exports.requestPasswordReset = async (req, res) => {
         email: normalizedEmail,
       });
       if (error && !/user not found/i.test(error.message)) throw error;
-      if (data?.user && view(data.user).role === role)
+      if (data?.user && (await customerStore.getRole(data.user.id)) === role)
         account = { userId: data.user.id, role, provider: 'supabase' };
     } else {
       console.error('Supabase password reset is unavailable without SUPABASE_SERVICE_ROLE_KEY.');
@@ -232,7 +226,7 @@ exports.completePasswordReset = async (req, res) => {
       if (!admin) throw new Error('Supabase password reset requires SUPABASE_SERVICE_ROLE_KEY.');
       const { data, error: lookupError } = await admin.auth.admin.getUserById(account.userId);
       if (lookupError) throw lookupError;
-      if (!data.user || view(data.user).role !== role) {
+      if (!data.user || (await customerStore.getRole(data.user.id)) !== role) {
         passwordResetTokens.finish(token, true);
         return res.status(400).json({ error: 'This reset link is invalid or has expired. Request a new link.' });
       }
@@ -352,7 +346,7 @@ exports.changePassword = async (req, res) => {
     users.updatePassword(req.user.id, newPassword);
     return res.json({ message: 'Password updated successfully.' });
   }
-  if (!supabaseDb) return res.status(503).json({ error: 'Password changes are unavailable while authentication is disconnected.' });
+  if (!supabase) return res.status(503).json({ error: 'Password changes are unavailable while authentication is disconnected.' });
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;

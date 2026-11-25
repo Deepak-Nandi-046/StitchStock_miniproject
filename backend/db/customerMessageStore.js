@@ -1,160 +1,157 @@
-const fs = require('fs/promises');
-const path = require('path');
-const crypto = require('crypto');
-const { writeJson } = require('./jsonFile');
+const { query } = require('./pool');
+const { runInTransaction } = require('../engines/e2-safety');
 
-const recordsPath = path.join(__dirname, '..', 'data', 'customer-messages.json');
-let conversations;
-let writes = Promise.resolve();
+const THREAD_SELECT = `
+  select mt.thread_id as id,
+         mt.customer_id as "customerId",
+         c.full_name as "customerName",
+         c.email as "customerEmail",
+         coalesce(c.phone, '') as "customerPhone",
+         coalesce(c.avatar_url, '') as "customerAvatar",
+         mt.status,
+         mt.created_at as "createdAt",
+         mt.updated_at as "updatedAt"
+    from message_thread mt
+    join customer c on c.customer_id = mt.customer_id`;
 
-function legacyMessages(record) {
-  return [
-    {
-      id: `${record.id}:customer`,
-      sender: 'customer',
-      text: record.message,
-      subject: record.subject || '',
-      at: record.createdAt,
-      readByAdmin: record.status !== 'New',
-      readByCustomer: true,
-    },
-    ...(record.adminReplies || []).map((reply, index) => ({
-      id: `${record.id}:admin:${index}`,
-      sender: 'admin',
-      text: reply.text,
-      at: reply.at,
-      readByAdmin: true,
-      readByCustomer: true,
-    })),
-  ];
+async function hydrate(rows, conn) {
+  if (!rows.length) return [];
+  const ids = rows.map(thread => thread.id);
+  const messages = await query(
+    `select message_id as id,
+            thread_id as "threadId",
+            sender,
+            subject,
+            body as text,
+            sent_at as at,
+            read_by_admin as "readByAdmin",
+            read_by_customer as "readByCustomer"
+       from message
+      where thread_id = any($1::uuid[])
+      order by sent_at, message_id`,
+    [ids],
+    conn,
+  );
+  const grouped = new Map(ids.map(id => [id, []]));
+  messages.forEach(message => grouped.get(message.threadId).push({
+    id: message.id,
+    sender: message.sender,
+    text: message.text,
+    subject: message.subject || '',
+    at: message.at,
+    readByAdmin: message.readByAdmin,
+    readByCustomer: message.readByCustomer,
+  }));
+  return rows.map(thread => ({
+    ...thread,
+    customerName: thread.customerName || 'Customer',
+    customerEmail: thread.customerEmail || '',
+    customerPhone: thread.customerPhone || '',
+    customerAvatar: thread.customerAvatar || '',
+    messages: grouped.get(thread.id) || [],
+  }));
 }
 
-async function load() {
-  if (conversations) return conversations;
-  try {
-    const records = JSON.parse(await fs.readFile(recordsPath, 'utf8'));
-    if (!Array.isArray(records)) throw new Error('Customer message data must be an array');
-    const byCustomer = new Map();
-    records.forEach(record => {
-      const customerId = String(record.customerId);
-      let thread = byCustomer.get(customerId);
-      if (!thread) {
-        thread = {
-          id: record.id,
-          customerId: record.customerId,
-          customerName: record.customerName || 'Customer',
-          customerEmail: record.customerEmail || '',
-          status: record.status === 'Closed' ? 'Closed' : 'Open',
-          createdAt: record.createdAt,
-          updatedAt: record.updatedAt || record.createdAt,
-          messages: [],
-        };
-        byCustomer.set(customerId, thread);
-      }
-      thread.messages.push(...(Array.isArray(record.messages) ? record.messages : legacyMessages(record)));
-      if (new Date(record.createdAt) < new Date(thread.createdAt)) thread.createdAt = record.createdAt;
-      if (new Date(record.updatedAt || record.createdAt) > new Date(thread.updatedAt))
-        thread.updatedAt = record.updatedAt || record.createdAt;
-    });
-    conversations = [...byCustomer.values()];
-    conversations.forEach(thread => thread.messages.sort((a, b) => new Date(a.at) - new Date(b.at)));
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-    conversations = [];
-  }
-  return conversations;
+async function getById(id, conn) {
+  const rows = await query(`${THREAD_SELECT} where mt.thread_id = $1`, [id], conn);
+  return (await hydrate(rows, conn))[0] || null;
 }
 
-function save() {
-  writes = writes.then(() => writeJson(recordsPath, conversations));
-  return writes;
-}
-
-async function create({ customerId, customerName, customerEmail, customerPhone, customerAvatar, subject, message }) {
-  await load();
-  let record = conversations.find(item => String(item.customerId) === String(customerId));
-  const now = new Date().toISOString();
-  if (!record) {
-    record = {
-      id: crypto.randomUUID(),
-      customerId,
-      customerName,
-      customerEmail,
-      customerPhone: customerPhone || '',
-      customerAvatar: customerAvatar || '',
-      status: 'Open',
-      createdAt: now,
-      messages: [],
-    };
-    conversations.unshift(record);
-  }
-  record.customerName = customerName || record.customerName;
-  record.customerEmail = customerEmail || record.customerEmail;
-  record.customerPhone = customerPhone || record.customerPhone || '';
-  record.customerAvatar = customerAvatar || record.customerAvatar || '';
-  record.status = 'Open';
-  record.updatedAt = now;
-  record.messages.push({
-    id: crypto.randomUUID(),
-    sender: 'customer',
-    text: message,
-    subject: subject || '',
-    at: now,
-    readByAdmin: false,
-    readByCustomer: true,
+async function create({ customerId, subject, message }) {
+  return runInTransaction(async conn => {
+    const [thread] = await query(
+      `insert into message_thread (customer_id, status)
+       values ($1, 'Open')
+       on conflict (customer_id) do update
+         set status = 'Open', updated_at = now()
+       returning thread_id`,
+      [customerId],
+      conn,
+    );
+    await query(
+      `insert into message
+         (thread_id, sender, subject, body, read_by_admin, read_by_customer)
+       values ($1, 'customer', $2, $3, false, true)`,
+      [thread.thread_id, subject || '', message],
+      conn,
+    );
+    await query('update message_thread set updated_at = now() where thread_id = $1', [thread.thread_id], conn);
+    return getById(thread.thread_id, conn);
   });
-  await save();
-  return record;
 }
 
 async function listAll() {
-  return [...await load()].sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+  const threads = await query(`${THREAD_SELECT} order by mt.updated_at desc, mt.thread_id`);
+  return hydrate(threads);
 }
 
 async function listForCustomer(customerId) {
-  const thread = (await load()).find(message => String(message.customerId) === String(customerId));
-  if (!thread) return null;
-  const unreadCount = thread.messages.filter(message => message.sender === 'admin' && !message.readByCustomer).length;
-  thread.messages.forEach(message => {
-    if (message.sender === 'admin') message.readByCustomer = true;
+  return runInTransaction(async conn => {
+    const threads = await query(`${THREAD_SELECT} where mt.customer_id = $1`, [customerId], conn);
+    if (!threads.length) return null;
+    const threadId = threads[0].id;
+    const [unread] = await query(
+      `select count(*)::integer as count
+         from message
+        where thread_id = $1 and sender = 'admin' and read_by_customer = false`,
+      [threadId],
+      conn,
+    );
+    await query(
+      `update message set read_by_customer = true
+        where thread_id = $1 and sender = 'admin' and read_by_customer = false`,
+      [threadId],
+      conn,
+    );
+    const [thread] = await hydrate(threads, conn);
+    thread.unreadCount = unread.count;
+    return thread;
   });
-  await save();
-  return { ...thread, unreadCount };
 }
 
 async function unreadForCustomer(customerId) {
-  const thread = (await load()).find(message => String(message.customerId) === String(customerId));
-  return thread ? thread.messages.filter(message => message.sender === 'admin' && !message.readByCustomer).length : 0;
+  const [row] = await query(
+    `select count(*)::integer as count
+       from message m
+       join message_thread t on t.thread_id = m.thread_id
+      where t.customer_id = $1 and m.sender = 'admin' and m.read_by_customer = false`,
+    [customerId],
+  );
+  return row.count;
 }
 
 async function reply(id, { reply, status, markRead }) {
-  await load();
-  const message = conversations.find(item => item.id === id);
-  if (!message) return null;
-  if (reply) {
-    const now = new Date().toISOString();
-    message.messages.push({
-      id: crypto.randomUUID(),
-      sender: 'admin',
-      text: reply,
-      at: now,
-      readByAdmin: true,
-      readByCustomer: false,
-    });
-    message.status = 'Open';
-    message.updatedAt = now;
-  }
-  if (status) {
-    message.status = status;
-  }
-  if (markRead) {
-    message.messages.forEach(item => {
-      if (item.sender === 'customer') item.readByAdmin = true;
-    });
-  }
-  message.updatedAt = new Date().toISOString();
-  await save();
-  return message;
+  return runInTransaction(async conn => {
+    const [thread] = await query(
+      'select thread_id from message_thread where thread_id = $1 for update',
+      [id],
+      conn,
+    );
+    if (!thread) return null;
+
+    if (reply) {
+      await query(
+        `insert into message
+           (thread_id, sender, subject, body, read_by_admin, read_by_customer)
+         values ($1, 'admin', '', $2, true, false)`,
+        [id, reply],
+        conn,
+      );
+      await query("update message_thread set status = 'Open' where thread_id = $1", [id], conn);
+    }
+    if (status)
+      await query('update message_thread set status = $2 where thread_id = $1', [id, status], conn);
+    if (markRead)
+      await query(
+        `update message set read_by_admin = true
+          where thread_id = $1 and sender = 'customer' and read_by_admin = false`,
+        [id],
+        conn,
+      );
+
+    await query('update message_thread set updated_at = now() where thread_id = $1', [id], conn);
+    return getById(id, conn);
+  });
 }
 
 module.exports = { create, listAll, listForCustomer, unreadForCustomer, reply };

@@ -19,6 +19,7 @@ async function initShop() {
   app.innerHTML = renderStorePage();
   bindShopHeader();
   if (currentStorePage === 'shop') bindGiftFinder();
+  await pullCustomerState();
   await loadProducts();
   if (currentStorePage === 'orders') {
     await loadOrders();
@@ -184,7 +185,18 @@ async function loadOrders() {
     }
     host.innerHTML = `<div class="tracking-list">${customerOrders.map(renderCustomerOrder).join('')}</div>`;
     host.querySelectorAll('[data-order-request]').forEach(button => {
-      button.onclick = () => submitOrderRequest(button);
+      button.onclick = () => {
+        const form = [...host.querySelectorAll('[data-order-request-form]')]
+          .find(item => item.dataset.orderRequestForm === button.dataset.orderRequest);
+        if (form) {
+          form.hidden = false;
+          form.querySelector('textarea').focus();
+        }
+      };
+    });
+    host.querySelectorAll('[data-order-request-form]').forEach(form => {
+      form.onsubmit = event => submitOrderRequest(event, form);
+      form.querySelector('[data-request-cancel]').onclick = () => { form.hidden = true; };
     });
     host.querySelectorAll('[data-payment-form]').forEach(form => {
       form.onsubmit = event => submitCustomerPayment(event, form);
@@ -256,22 +268,57 @@ async function submitCustomerPayment(event, form) {
 
 function renderOrderReturnAction(order) {
   const request = customerReturnRequests.find(item => String(item.orderId) === String(order.id));
+  const rejectionNotice = request && request.status === 'Rejected'
+    ? `<p class="tracking-gift">Return/cancellation request: Rejected</p>
+      <p class="return-rejection-reason"><strong>Admin's reason:</strong> ${esc(request.rejectionReason || 'No reason was recorded.')}</p>`
+    : '';
   if (request && !['Rejected', 'Completed'].includes(request.status))
-    return `<p class="tracking-gift">Return/cancellation request: ${esc(request.status)}</p>`;
+    return `<p class="tracking-gift">Return/cancellation request: ${esc(request.status)}</p>
+      ${(request.evidence || []).filter(file => file.url).map(file =>
+        `<a class="tracking-gift" href="${esc(file.url)}" target="_blank" rel="noopener">${esc(file.name || 'View submitted evidence')}</a>`
+      ).join('')}`;
   const type = ['Placed', 'Confirmed'].includes(order.status) ? 'Cancellation' : order.status === 'Delivered' ? 'Return' : '';
-  return type ? `<button type="button" class="outline-btn order-request-action" data-order-request="${esc(order.id)}" data-request-type="${type}">Request ${type.toLowerCase()}</button>` : '';
+  if (!type) return rejectionNotice;
+  return `${rejectionNotice}<div class="order-return-control">
+    <button type="button" class="outline-btn order-request-action" data-order-request="${esc(order.id)}">Request ${type.toLowerCase()}</button>
+    <form class="order-return-form" data-order-request-form="${esc(order.id)}" data-request-type="${type}" hidden>
+      <label>Reason<textarea name="message" maxlength="1000" required placeholder="Tell us why you are requesting this ${type.toLowerCase()}."></textarea></label>
+      ${type === 'Return' ? `<label>Product photos or video (optional)<input name="evidence" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime" multiple></label>
+        <small>Attach up to 3 photos and 1 video. Photos: up to 2 MB each; video: up to 8 MB.</small>` : ''}
+      <div class="order-return-form-actions">
+        <button type="submit" class="outline-btn">Submit request</button>
+        <button type="button" class="outline-btn" data-request-cancel>Cancel</button>
+      </div>
+    </form>
+  </div>`;
 }
 
-async function submitOrderRequest(button) {
-  const type = button.dataset.requestType;
-  const message = prompt(`Tell us why you are requesting this ${type.toLowerCase()}.`);
-  if (!message || !message.trim()) return;
+async function submitOrderRequest(event, form) {
+  event.preventDefault();
+  const type = form.dataset.requestType;
+  const message = form.elements.message.value.trim();
+  const files = [...(form.elements.evidence?.files || [])];
+  const photoCount = files.filter(file => file.type.startsWith('image/')).length;
+  const videoCount = files.filter(file => file.type.startsWith('video/')).length;
+  if (photoCount > 3 || videoCount > 1 || files.length > 4)
+    return toast('Choose up to 3 photos and 1 video.');
+  if (files.some(file => !file.type.startsWith('image/') && !file.type.startsWith('video/')))
+    return toast('Choose JPG, PNG, WebP, MP4, WebM, or MOV files.');
+  if (files.some(file => file.size > (file.type.startsWith('video/') ? 8 : 2) * 1024 * 1024))
+    return toast('Photos must be 2 MB or smaller and videos 8 MB or smaller.');
+
+  const button = form.querySelector('[type=submit]');
   button.disabled = true;
   try {
+    const evidence = await Promise.all(files.map(async file => ({
+      name: file.name,
+      data: (await readCustomisationFile(file)).data,
+    })));
     await api('/returns', 'POST', {
-      orderId: button.dataset.orderRequest,
+      orderId: form.dataset.orderRequestForm,
       type,
-      message: message.trim(),
+      message,
+      evidence,
     });
     toast(`${type} request submitted`);
     await loadOrders();
@@ -469,6 +516,58 @@ function renderFeatured() {
   });
 }
 
+// ---- Database sync for the bag and wishlist -------------------------------------------------
+// localStorage stays as a fast local copy; the database (cart_item / wishlist_item) is the source of
+// truth. We load it once when a store page opens, and save the full state after every change.
+let cartSyncChain = Promise.resolve();
+let wishlistSyncChain = Promise.resolve();
+let serverStateAvailable = true;
+
+function queueCartSync() {
+  if (!serverStateAvailable) return;
+  cartSyncChain = cartSyncChain
+    .then(() => api('/cart', 'PUT', { items: getBagItems(), colors: getBagColors() }))
+    .catch(error => console.warn('Could not save the bag:', error.message));
+}
+
+function queueWishlistSync() {
+  if (!serverStateAvailable) return;
+  wishlistSyncChain = wishlistSyncChain
+    .then(() => api('/wishlist', 'PUT', { ids: getWishlist() }))
+    .catch(error => console.warn('Could not save the wishlist:', error.message));
+}
+
+async function pullCustomerState() {
+  const user = store.user;
+  if (!user || user.role !== 'customer') return;
+  try {
+    const [cart, wishlist] = await Promise.all([api('/cart'), api('/wishlist')]);
+    if (cart.persisted === false) { serverStateAvailable = false; return; }   // demo account
+    // First time this customer opens the shop after the feature was added: keep what is already
+    // in this browser and upload it, instead of wiping it with an empty database copy.
+    const flag = 'ss_state_synced_' + user.id;
+    const firstSync = !localStorage.getItem(flag);
+
+    if (firstSync && !Object.keys(cart.items).length && Object.keys(getBagItems()).length) {
+      queueCartSync();
+    } else {
+      localStorage.setItem('ss_bag_items', JSON.stringify(cart.items));
+      localStorage.setItem('ss_bag_colors', JSON.stringify(cart.colors));
+      localStorage.setItem('ss_bag', JSON.stringify(Object.keys(cart.items)));
+    }
+    if (firstSync && !wishlist.ids.length && getWishlist().length) {
+      queueWishlistSync();
+    } else {
+      localStorage.setItem('ss_wishlist', JSON.stringify(wishlist.ids));
+    }
+    localStorage.setItem(flag, '1');
+    updateBagCount();
+    updateWishlistCount();
+  } catch (error) {
+    console.warn('Could not load the saved bag and wishlist:', error.message);
+  }
+}
+
 function getWishlist() {
   try {
     const value = JSON.parse(localStorage.getItem('ss_wishlist') || '[]');
@@ -479,6 +578,7 @@ function getWishlist() {
 function setWishlist(ids) {
   try { localStorage.setItem('ss_wishlist', JSON.stringify(ids)); } catch (e) {}
   updateWishlistCount();
+  queueWishlistSync();
 }
 
 function renderWishlistPage() {
@@ -552,6 +652,7 @@ function setBagItems(items) {
     try { localStorage.removeItem('ss_bag_colors'); } catch (e) {}
   }
   setBag(ids);
+  queueCartSync();
   renderBag();
   renderBagPage();
 }
@@ -621,6 +722,7 @@ function setBagColor(productId, color) {
   const colors = getBagColors();
   colors[String(productId)] = color;
   try { localStorage.setItem('ss_bag_colors', JSON.stringify(colors)); } catch (e) {}
+  queueCartSync();
 }
 
 function addProductToBag(productId, quantity = 1, color = '') {
@@ -1118,6 +1220,20 @@ function openCheckout(entries, title, bagCheckout = false) {
   document.getElementById('paymentConfirmed').checked = false;
   document.getElementById('paymentReference').value = '';
   document.getElementById('paymentProof').value = '';
+
+  // Confirm button stays disabled until checkbox ticked + reference + screenshot are provided
+  const updateConfirmState = () => {
+    const ready = document.getElementById('paymentConfirmed').checked
+      && document.getElementById('paymentReference').value.trim() !== ''
+      && document.getElementById('paymentProof').files.length > 0;
+    document.getElementById('confirmPayment').disabled = !ready;
+  };
+  ['paymentConfirmed', 'paymentReference', 'paymentProof'].forEach(id => {
+    const el = document.getElementById(id);
+    el.oninput = updateConfirmState;
+    el.onchange = updateConfirmState;
+  });
+  updateConfirmState();
   document.getElementById('giftMessageField').hidden = true;
   document.getElementById('giftWrap').onchange = event => {
     document.getElementById('giftMessageField').hidden = !event.currentTarget.checked;
@@ -1176,9 +1292,10 @@ function openCheckout(entries, title, bagCheckout = false) {
       }
       if (modal.dataset.bagCheckout === 'true') setBagItems({});
       modal.hidden = true;
+      window.location.href = 'orders.html';
     } catch (error) {
       toast(error.message);
-    } finally {
+      console.error('Place order failed:', error);
       confirmButton.disabled = false;
     }
   };

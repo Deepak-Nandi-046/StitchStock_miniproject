@@ -1,39 +1,30 @@
-const fs = require('fs/promises');
-const path = require('path');
-const { writeJson } = require('./jsonFile');
-
-const recordsPath = path.join(__dirname, '..', 'data', 'profiles.json');
-let profiles;
-let writes = Promise.resolve();
-
-async function load() {
-  if (profiles) return profiles;
-  try {
-    profiles = JSON.parse(await fs.readFile(recordsPath, 'utf8'));
-    if (!Array.isArray(profiles)) throw new Error('Profile data must be an array');
-  } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
-    profiles = [];
-  }
-  return profiles;
-}
+// Profile = public.customer (customers) or public.user_profile (owner).
+const { query } = require('./pool');
+const customerStore = require('./customerStore');
 
 async function get(id, defaults = {}) {
-  const record = (await load()).find(profile => String(profile.id) === String(id));
-  return { ...defaults, ...(record || {}) };
+  if (!customerStore.isUuid(id)) return { ...defaults };
+  const customer = await customerStore.get(id);
+  if (customer) {
+    return { ...defaults, id: customer.id, name: customer.name, email: customer.email, phone: customer.phone,
+             address: customer.address, pincode: customer.pincode, avatarUrl: customer.avatarUrl };
+  }
+  const rows = await query('select full_name from user_profile where user_id = $1', [id]);
+  return rows[0] ? { ...defaults, id, name: rows[0].full_name } : { ...defaults };
 }
 
 async function update(id, updates) {
-  const records = await load();
-  let profile = records.find(item => String(item.id) === String(id));
-  if (!profile) {
-    profile = { id };
-    records.push(profile);
-  }
-  Object.assign(profile, updates);
-  writes = writes.then(() => writeJson(recordsPath, records));
-  await writes;
-  return { ...profile };
+  if (!customerStore.isUuid(id)) return { id, ...updates };
+  if (updates.name) await query('update user_profile set full_name = $2 where user_id = $1', [id, updates.name]);
+  const map = { name: 'full_name', email: 'email', phone: 'phone', address: 'address', pincode: 'pincode', avatarUrl: 'avatar_url' };
+  const sets = []; const values = [id];
+  Object.entries(map).forEach(([key, column]) => {
+    if (updates[key] === undefined) return;
+    values.push(key === 'email' ? String(updates[key]).toLowerCase() : updates[key]);
+    sets.push(`${column} = $${values.length}`);
+  });
+  if (sets.length) await query(`update customer set ${sets.join(', ')} where customer_id = $1`, values);
+  return get(id, { id });
 }
 
 module.exports = { get, update };

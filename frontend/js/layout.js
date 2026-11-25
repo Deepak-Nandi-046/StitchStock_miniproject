@@ -1,4 +1,6 @@
 // Shared role-aware header and account menu.
+let customerUnreadBadgeRequest = 0;
+
 function renderLayout(role, u) {
   const customerNav = [
     ['Home', 'index.html'], ['Shop', 'shop.html'],
@@ -88,10 +90,10 @@ function renderLayout(role, u) {
 
   if (role === 'owner') renderAdminSidebar(header, ownerNav);
   if (role === 'customer') {
-    api('/messages/unread').then(result => {
-      const link = [...document.querySelectorAll('#mainNav a')].find(item => item.href.endsWith('/messages.html'));
-      if (link && result.count) link.innerHTML += ` <span class="nav-unread-count">${esc(result.count)}</span>`;
-    }).catch(error => toast(error.message));
+    refreshCustomerUnreadBadge(true);
+    window.setInterval(() => {
+      if (!document.hidden) refreshCustomerUnreadBadge();
+    }, 30000);
   }
   document.getElementById('layoutLogout').onclick = () => {
     store.clear();
@@ -110,6 +112,37 @@ function renderLayout(role, u) {
   document.getElementById('layoutDelete').onclick = openDeleteModal;
   updateWishlistCount();
   updateBagCount();
+}
+
+async function refreshCustomerUnreadBadge(showError = false) {
+  const requestId = ++customerUnreadBadgeRequest;
+  const link = document.querySelector('#mainNav a[href="messages.html"]');
+  if (!link) return;
+  try {
+    const result = await api('/messages/unread');
+    if (requestId !== customerUnreadBadgeRequest) return;
+    const count = Math.max(0, Number(result.count) || 0);
+    let badge = link.querySelector('.nav-unread-count');
+    if (!count) {
+      if (badge) badge.remove();
+      link.removeAttribute('aria-label');
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'nav-unread-count';
+      badge.setAttribute('aria-live', 'polite');
+      link.appendChild(badge);
+    }
+    const label = `${count} unread message${count === 1 ? '' : 's'}`;
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.title = label;
+    badge.setAttribute('aria-label', label);
+    link.setAttribute('aria-label', `Chat with Admin, ${label}`);
+  } catch (error) {
+    if (showError) toast(error.message);
+    else console.warn('Could not refresh unread message badge:', error.message);
+  }
 }
 
 function renderAdminSidebar(header, nav) {
@@ -163,26 +196,32 @@ function renderAdminSidebar(header, nav) {
 async function refreshAdminSidebarBadges() {
   if (!document.getElementById('adminSidebar')) return;
   try {
-    const [messages, requests, summary] = await Promise.all([
-      api('/owner/messages'),
+    const messages = await api('/owner/messages');
+    updateAdminChatBadge(messages);
+  } catch (error) {
+    toast(error.message);
+  }
+  try {
+    const [requests, summary] = await Promise.all([
       api('/owner/custom-requests'),
       api('/owner/summary'),
     ]);
-    const unreadMessages = messages.reduce((total, thread) =>
-      total + (thread.messages || []).filter(message => message.sender === 'customer' && !message.readByAdmin).length, 0
-    );
-    const pendingRequests = requests.filter(request =>
-      ['Submitted', 'Under Review', 'Need More Details'].includes(request.status)
-    ).length;
+    const unreadRequests = requests.filter(request => !request.adminViewedAt).length;
     const pendingPayments = summary.orders.filter(order =>
       ['Payment Submitted', 'Awaiting Verification'].includes(order.paymentStatus)
     ).length;
-    setAdminSidebarBadge('chats', unreadMessages, 'unread messages');
-    setAdminSidebarBadge('custom-requests', pendingRequests, 'pending requests');
+    setAdminSidebarBadge('custom-requests', unreadRequests, 'unread requests');
     setAdminSidebarBadge('payments', pendingPayments, 'payments to verify');
   } catch (error) {
     toast(error.message);
   }
+}
+
+function updateAdminChatBadge(threads) {
+  const unreadChats = threads.filter(thread =>
+    (thread.messages || []).some(message => message.sender === 'customer' && !message.readByAdmin)
+  ).length;
+  setAdminSidebarBadge('chats', unreadChats, 'unread chats');
 }
 
 function setAdminSidebarBadge(key, count, description) {

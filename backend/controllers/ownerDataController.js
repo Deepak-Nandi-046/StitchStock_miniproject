@@ -1,4 +1,5 @@
-const db = require('../db');
+const productStore = require('../db/productStore');
+const orderStore = require('../db/orderStore');
 const users = require('../auth/users');
 const customerStore = require('../db/customerStore');
 const customRequestStore = require('../db/customRequestStore');
@@ -8,12 +9,13 @@ const reviewStore = require('../db/reviewStore');
 const { listAudit } = require('../engines/e3-audit');
 
 async function customerData() {
-  const [customRequests, messages, returns, reviews, registeredCustomers] = await Promise.all([
+  const [customRequests, messages, returns, reviews, registeredCustomers, allOrders] = await Promise.all([
     customRequestStore.listAll(),
     messageStore.listAll(),
     returnStore.listAll(),
     reviewStore.listAll(),
     customerStore.list(),
+    orderStore.listAll(),
   ]);
   const profiles = new Map();
   const getProfile = (id, info = {}) => {
@@ -52,7 +54,7 @@ async function customerData() {
       registeredAt: customer.registeredAt,
     });
   });
-  db.orders.forEach(order => {
+  allOrders.forEach(order => {
     const profile = getProfile(order.customerId, {
       name: order.customerName,
       email: order.customerEmail,
@@ -123,7 +125,7 @@ exports.customer = async (req, res) => {
 };
 
 exports.reviews = async (req, res) => {
-  const products = new Map(db.products.map(product => [String(product.id), product.name]));
+  const products = new Map((await productStore.list({ includeInactive: true })).map(product => [String(product.id), product.name]));
   const reviews = await reviewStore.listAll();
   res.json(reviews.map(review => ({
     ...review,
@@ -132,10 +134,11 @@ exports.reviews = async (req, res) => {
 };
 
 exports.notifications = async (req, res) => {
-  const [requests, messages, returns] = await Promise.all([
+  const [requests, messages, returns, allOrders] = await Promise.all([
     customRequestStore.listAll(),
     messageStore.listAll(),
     returnStore.listAll(),
+    orderStore.listAll(),
   ]);
   const notifications = [
     ...requests.filter(item => ['Submitted', 'Under Review', 'Need More Details'].includes(item.status))
@@ -144,11 +147,11 @@ exports.notifications = async (req, res) => {
       .map(item => ({ id: `message-${item.id}`, type: 'Customer chat', title: `Message from ${item.customerName}`, detail: (item.messages[item.messages.length - 1] || {}).text || '', at: item.updatedAt || item.createdAt, href: 'owner.html?view=chats' })),
     ...returns.filter(item => ['Pending', 'Under Review'].includes(item.status))
       .map(item => ({ id: `return-${item.id}`, type: 'Return or cancellation', title: `${item.type} request for order ${item.orderId}`, detail: `${item.customerName} · ${item.status}`, at: item.createdAt, href: 'owner.html?view=returns' })),
-    ...db.orders.filter(item => item.isPreorder && item.preorderStatus === 'Pending')
+    ...allOrders.filter(item => item.isPreorder && item.preorderStatus === 'Pending')
       .map(item => ({ id: `preorder-${item.id}`, type: 'Pre-order', title: `Pre-order ${item.preorderId || item.id} needs review`, detail: `${item.productName} · Qty ${item.qty}`, at: item.createdAt, href: 'owner.html?view=preorders' })),
-    ...db.orders.filter(item => !item.isPreorder && item.status === 'Placed')
+    ...allOrders.filter(item => !item.isPreorder && item.status === 'Placed')
       .map(item => ({ id: `order-${item.id}`, type: 'New order', title: `Order ${item.id} needs confirmation`, detail: `${item.customerName} · ${item.productName} · Qty ${item.qty}`, at: item.createdAt, href: 'owner.html?view=orders' })),
-    ...db.orders.filter(item => ['Payment Submitted', 'Awaiting Verification'].includes(item.paymentStatus))
+    ...allOrders.filter(item => ['Payment Submitted', 'Awaiting Verification'].includes(item.paymentStatus))
       .map(item => ({ id: `payment-${item.id}`, type: 'Payment verification', title: `Payment for order ${item.id} needs verification`, detail: `${item.customerName} · ₹${Number(item.paymentSubmission && item.paymentSubmission.amountPaid || item.totalAmount || 0).toLocaleString('en-IN')}`, at: item.paymentSubmission && item.paymentSubmission.submittedAt || item.createdAt, href: 'owner.html?view=payments' })),
   ];
   res.json(notifications.sort((a, b) => new Date(b.at) - new Date(a.at)));

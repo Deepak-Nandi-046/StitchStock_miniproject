@@ -492,6 +492,13 @@
 .customisation-payment-note { color: var(--muted); font-size: 12px; }
 .offer-actions { justify-content: flex-start; }
 .order-request-action { margin-top: 8px; padding: 8px 13px; border: 1px solid var(--border); border-radius: 999px; color: var(--raspberry); background: #fff; font-weight: 800; }
+.order-return-form { display: grid; gap: 8px; max-width: 520px; margin-top: 10px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #fff9fa; }
+.order-return-form[hidden] { display: none; }
+.order-return-form label { display: grid; gap: 5px; color: var(--muted); font-size: 12px; font-weight: 800; }
+.order-return-form textarea { min-height: 74px; padding: 9px; border: 1px solid var(--border); border-radius: 9px; color: var(--plum); font: inherit; resize: vertical; }
+.order-return-form input[type="file"] { width: 100%; padding: 7px; border: 1px solid var(--border); border-radius: 9px; background: #fff; }
+.order-return-form small { color: var(--muted); font-size: 11px; }
+.order-return-form-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .message-card h3 { margin: 10px 0 4px; color: var(--plum); }
 .message-card .customisation-reply time { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
 
@@ -553,6 +560,8 @@
 .tracking-steps li.complete { color: var(--raspberry); font-weight: 800; }
 .tracking-steps li.complete span { border-color: var(--raspberry); background: var(--raspberry); }
 .tracking-gift { margin-bottom: 0; color: var(--muted); font-size: 12px; }
+.tracking-card > a.tracking-gift { display: inline-block; margin: 5px 8px 0 0; }
+.return-rejection-reason { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--plum); }
 .checkout-colour { margin-top: 8px; }
 .gift-wrap-options { padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: #fff; }
 .gift-wrap-toggle { display: flex !important; grid-template-columns: auto 1fr; align-items: center; }

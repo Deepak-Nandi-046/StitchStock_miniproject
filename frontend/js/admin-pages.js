@@ -19,7 +19,7 @@ function initAdminPage() {
     'custom-requests': ['Customisation Requests', 'Review and respond to handmade requests'],
     orders: ['Orders', 'Manage every customer order'],
     preorders: ['Pre-orders', 'Track availability and waiting orders'],
-    chats: ['Customer Chats', 'Conversations with Stitch & Stole customers'],
+    chats: ['Customer Chats', 'Conversations with StitchStock customers'],
     payments: ['Payment Verification', 'Review customer payment submissions'],
     reviews: ['Reviews', 'Ratings and customer feedback'],
     returns: ['Returns & Cancellations', 'Review customer order requests'],
@@ -69,6 +69,7 @@ async function refreshAdmin(manual) {
         ownerSummary = summary;
         customRequests = requests;
         customerMessages = messages;
+        updateAdminChatBadge(customerMessages);
         returnRequests = returns;
         adminNotifications = notifications;
         renderOverview();
@@ -79,12 +80,21 @@ async function refreshAdmin(manual) {
         ownerSummary = await api('/owner/summary');
         viewName === 'orders' ? renderOrdersPage() : renderPreordersPage();
         break;
-      case 'custom-requests':
+      case 'custom-requests': {
         customRequests = await api('/owner/custom-requests');
+        const unreadRequestIds = customRequests
+          .filter(request => !request.adminViewedAt)
+          .map(request => request.id);
+        if (unreadRequestIds.length) {
+          await api('/owner/custom-requests/mark-viewed', 'POST', { requestIds: unreadRequestIds });
+          await refreshAdminSidebarBadges();
+        }
         renderCustomRequestsPage();
         break;
+      }
       case 'chats':
         customerMessages = await api('/owner/messages');
+        updateAdminChatBadge(customerMessages);
         renderChatsPage();
         break;
       case 'payments':
@@ -336,7 +346,9 @@ function renderChatsPage() {
       <label>Reply<textarea name="reply" rows="3" maxlength="3000" required placeholder="Write a reply"></textarea></label>
       <button type="submit" class="pill-btn">Send Reply</button>
     </form>`;
-  api(`/owner/messages/${encodeURIComponent(selected.id)}`, 'PATCH', { markRead: true }).catch(error => toast(error.message));
+  api(`/owner/messages/${encodeURIComponent(selected.id)}`, 'PATCH', { markRead: true })
+    .then(() => refreshAdminSidebarBadges())
+    .catch(error => toast(error.message));
   document.getElementById('adminChatReply').onsubmit = async event => {
     event.preventDefault();
     const form = event.currentTarget;
@@ -405,13 +417,60 @@ function renderReturnsPage() {
     <div class="admin-panel-heading"><div><h2>${esc(request.type)} · Order ${esc(request.orderId)}</h2><span>${esc(request.customerName)} · ${esc(request.customerEmail || 'Email not recorded')}</span></div>${chip(request.status)}</div>
     <p><strong>${esc(request.productName)}</strong> · Qty ${esc(request.quantity)} · Order status at request: ${esc(request.orderStatus)}</p>
     <p class="admin-message-copy">${esc(request.message)}</p>
+    ${request.status === 'Rejected' ? `<p class="return-rejection-reason"><strong>Rejection reason:</strong> ${esc(request.rejectionReason || 'No reason was recorded.')}</p>` : ''}
+    ${(request.evidence || []).filter(file => file.url).length ? `<div class="return-evidence">${(request.evidence || []).filter(file => file.url).map(file =>
+      file.mimeType.startsWith('image/')
+        ? `<a href="${esc(file.url)}" target="_blank" rel="noopener"><img src="${esc(file.url)}" alt="${esc(file.name || 'Customer return evidence')}"></a>`
+        : `<video controls preload="metadata" src="${esc(file.url)}" aria-label="${esc(file.name || 'Customer return evidence')}"></video>`
+    ).join('')}</div>` : ''}
     <time class="admin-muted">${esc(new Date(request.createdAt).toLocaleString('en-IN'))}</time>
     ${['Pending', 'Under Review'].includes(request.status) ? `<div class="order-actions">
       <button class="compact-btn" data-return-status="Under Review" data-return-id="${esc(request.id)}">Under Review</button>
       <button class="compact-btn primary" data-return-status="Approved" data-return-id="${esc(request.id)}">${request.type === 'Cancellation' ? 'Approve cancellation' : 'Approve return'}</button>
-      <button class="compact-btn" data-return-status="Rejected" data-return-id="${esc(request.id)}">Reject</button>
+      <button class="compact-btn" data-return-reject data-return-id="${esc(request.id)}">Reject</button>
     </div>` : request.status === 'Approved' ? `<button class="compact-btn" data-return-status="Completed" data-return-id="${esc(request.id)}">Mark completed</button>` : ''}
+    ${['Pending', 'Under Review'].includes(request.status) ? `<form class="return-rejection-form" data-return-rejection-form data-return-id="${esc(request.id)}" hidden>
+      <label>Reason for rejection (shown to the customer)<textarea name="rejectionReason" maxlength="1000" required></textarea></label>
+      <div class="order-actions">
+        <button type="submit" class="compact-btn primary">Confirm rejection</button>
+        <button type="button" class="compact-btn" data-cancel-rejection>Cancel</button>
+      </div>
+    </form>` : ''}
   </article>`).join('')}` : '<div class="admin-empty">No return or cancellation requests yet.</div>');
+  document.querySelectorAll('[data-return-reject]').forEach(button => {
+    button.onclick = () => {
+      const form = button.closest('.admin-panel').querySelector('[data-return-rejection-form]');
+      if (!form) return;
+      form.hidden = false;
+      button.hidden = true;
+      form.elements.rejectionReason.focus();
+    };
+  });
+  document.querySelectorAll('[data-return-rejection-form]').forEach(form => {
+    form.querySelector('[data-cancel-rejection]').onclick = () => {
+      form.hidden = true;
+      form.reset();
+      form.closest('.admin-panel').querySelector('[data-return-reject]').hidden = false;
+    };
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const rejectionReason = form.elements.rejectionReason.value.trim();
+      if (!rejectionReason) return toast('Enter a reason for rejecting this request.');
+      const button = form.querySelector('[type=submit]');
+      button.disabled = true;
+      try {
+        await api(`/owner/returns/${encodeURIComponent(form.dataset.returnId)}`, 'PATCH', {
+          status: 'Rejected',
+          rejectionReason,
+        });
+        toast('Request rejected and reason sent to customer');
+        await refreshAdmin(false);
+      } catch (error) {
+        toast(error.message);
+        button.disabled = false;
+      }
+    };
+  });
   document.querySelectorAll('[data-return-status]').forEach(button => {
     button.onclick = async () => {
       button.disabled = true;

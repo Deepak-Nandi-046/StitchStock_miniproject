@@ -36,4 +36,5 @@ function restorePreorders(orders) {
     order.queuePosition = queued.queuePosition;
   });
 }
-module.exports = { enqueuePreorder, allocateNext, removePreorder, getQueue, restorePreorders };
+function clearQueues() { queues.clear(); nextId = 1; }
+module.exports = { enqueuePreorder, allocateNext, removePreorder, getQueue, restorePreorders, clearQueues };

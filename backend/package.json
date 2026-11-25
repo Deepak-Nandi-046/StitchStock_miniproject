@@ -1,1 +1,1 @@
-{"name":"stitchstock-backend","version":"0.1.0","main":"server.js","scripts":{"start":"node server.js","test":"node --test"},"dependencies":{"@supabase/supabase-js":"^2.119.1","dotenv":"^16.6.1","express":"^4.22.3","nodemailer":"^10.6.0"}}
+{"name":"stitchstock-backend","version":"0.1.0","main":"server.js","scripts":{"start":"node server.js","test":"node --test"},"dependencies":{"@supabase/supabase-js":"^2.119.1","dotenv":"^16.6.1","express":"^4.22.3","nodemailer":"^10.6.0","pg":"^8.13.0"}}
